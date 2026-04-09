@@ -44,10 +44,6 @@ Tegata sits on top of MCP and A2A. It doesn't replace them — it adds the missi
 
 ## Quick Start
 
-```bash
-npm install tegata
-```
-
 ```typescript
 import { Tegata } from "tegata";
 
@@ -175,17 +171,6 @@ Tegata's design maps directly to emerging AI governance requirements:
 - **California SB-833** (Jul 2026): Mandates pre-execution review of AI-proposed actions in critical infrastructure. Tegata's tiered approval fulfills this with `review`/`approve` tiers.
 - **NIST NCCoE**: Asks "how does an agent prove it is authorized to perform a specific action?" — this is exactly what Tegata defines.
 
-See [docs/regulatory-alignment.md](docs/regulatory-alignment.md) for detailed mapping.
-
-## Design Decisions
-
-Key architectural choices are documented as ADRs:
-
-- [ADR-001: Why Tiered Approval over binary allow/deny](docs/adr/001-tiered-approval.md)
-- [ADR-002: Why no custom DSL — Cedar as future plugin](docs/adr/002-no-custom-dsl.md)
-- [ADR-003: Why Trust Score is SHOULD, not MUST](docs/adr/003-trust-score-optional.md)
-- [ADR-004: Why ActionType uses free-form strings with glob matching](docs/adr/004-actiontype-glob.md)
-
 ## Roadmap
 
 - **v0.1** (Current): Agent → Tool authorization (MCP tool call intercept)
@@ -198,12 +183,6 @@ Key architectural choices are documented as ADRs:
 - **Wire Format**: JSON-RPC 2.0 (same as MCP/A2A)
 - **Spec Style**: RFC (MUST/SHOULD/MAY)
 - **License**: Apache 2.0
-
-## Contributing
-
-Contributions welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
-If you're working on MCP security, A2A authorization, or agent governance, open an issue — let's talk.
 
 ## License
 
