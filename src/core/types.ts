@@ -50,7 +50,7 @@ export type TimeoutBehavior = "deny" | "escalate";
 
 export type AgentRole = "proposer" | "reviewer" | "supervisor";
 
-export interface AgentRegistration {
+export type AgentRegistration = {
   /** Unique agent identifier. */
   id: string;
   /** Human-readable display name. */
@@ -61,13 +61,13 @@ export interface AgentRegistration {
   capabilities: ActionType[];
   /** Maximum riskScore this agent can approve without escalation. */
   maxApprovableRisk: number;
-}
+};
 
 // ------------------------------------------------------------
 // Action
 // ------------------------------------------------------------
 
-export interface Action {
+export type Action = {
   /** ActionType string — `domain:resource:operation`. */
   type: ActionType;
   /** Human-readable description of what this action does. */
@@ -78,26 +78,26 @@ export interface Action {
   reversible?: boolean;
   /** Description of how to undo this action. */
   rollbackPlan?: string;
-}
+};
 
 // ------------------------------------------------------------
 // Proposal
 // ------------------------------------------------------------
 
-export interface Proposal {
+export type Proposal = {
   /** ID of the agent or caller proposing this action. */
   proposer: string;
   /** The action being proposed. */
   action: Action;
   /** Arbitrary parameters for the tool call. */
   params?: Record<string, unknown>;
-}
+};
 
 // ------------------------------------------------------------
 // Decision (returned by propose())
 // ------------------------------------------------------------
 
-export interface Decision {
+export type Decision = {
   /** Unique ID for this proposal/decision pair. */
   proposalId: string;
   /** The original proposal. */
@@ -112,13 +112,13 @@ export interface Decision {
   reason?: string;
   /** ISO-8601 timestamp. */
   timestamp: string;
-}
+};
 
 // ------------------------------------------------------------
 // Policy Rule
 // ------------------------------------------------------------
 
-export interface PolicyRule {
+export type PolicyRule = {
   /** Glob pattern matched against ActionType. */
   match: ActionType;
   /** Approval tier to require for matching actions. */
@@ -129,13 +129,13 @@ export interface PolicyRule {
   reviewers?: string[];
   /** Override: escalate if riskScore exceeds this threshold. */
   escalateAbove?: number;
-}
+};
 
 // ------------------------------------------------------------
 // Tegata Config
 // ------------------------------------------------------------
 
-export interface TegataConfig {
+export type TegataConfig = {
   /** Default approval tier when no policy matches. */
   defaultTier?: ApprovalTier;
   /** Auto-escalate when riskScore exceeds this value. */
@@ -144,13 +144,13 @@ export interface TegataConfig {
   timeoutMs?: number;
   /** What to do when a review times out. */
   defaultOnTimeout?: TimeoutBehavior;
-}
+};
 
 // ------------------------------------------------------------
 // Audit Log
 // ------------------------------------------------------------
 
-export interface AuditEntry {
+export type AuditEntry = {
   /** Same as Decision.proposalId. */
   proposalId: string;
   /** ID of the proposing agent. */
@@ -163,9 +163,9 @@ export interface AuditEntry {
   finalStatus: DecisionStatus;
   /** ISO-8601 timestamp of the initial proposal. */
   timestamp: string;
-}
+};
 
-export interface AuditQuery {
+export type AuditQuery = {
   /** ISO-8601 date string — return entries on or after this date. */
   since?: string;
   /** Filter by proposer agent ID. */
@@ -174,20 +174,20 @@ export interface AuditQuery {
   actionType?: ActionType;
   /** Maximum number of entries to return. */
   limit?: number;
-}
+};
 
 // ------------------------------------------------------------
 // Result pattern — used throughout core instead of exceptions
 // ------------------------------------------------------------
 
-export interface Ok<T> {
+export type Ok<T> = {
   ok: true;
   value: T;
-}
+};
 
-export interface Err {
+export type Err = {
   ok: false;
   error: string;
-}
+};
 
 export type Result<T> = Ok<T> | Err;
