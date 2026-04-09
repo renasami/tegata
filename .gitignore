@@ -1,1 +1,7 @@
+# CLAUDE
 .claude
+CLAUDE.md
+
+# Ignore node modules and distribution files
+node_modules
+dist
