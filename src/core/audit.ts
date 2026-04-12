@@ -29,8 +29,9 @@ export class AuditStore {
   /**
    * Query the audit log.
    *
-   * Skeleton supports `since`, `proposer`, and `limit` filters.
-   * `actionType` glob matching will land with the policy engine.
+   * Supports `since`, `proposer`, `actionType` (exact match),
+   * and `limit` filters. Glob matching for `actionType` will
+   * land with the policy engine.
    *
    * @param q - Optional query filters.
    * @returns Matching entries, deep-cloned, in insertion order.
@@ -39,8 +40,10 @@ export class AuditStore {
     let results = this.entries;
 
     if (q?.since !== undefined) {
-      const since = q.since;
-      results = results.filter((e) => e.timestamp >= since);
+      const sinceMs = new Date(q.since).getTime();
+      results = results.filter(
+        (e) => new Date(e.timestamp).getTime() >= sinceMs,
+      );
     }
 
     if (q?.proposer !== undefined) {
@@ -48,8 +51,13 @@ export class AuditStore {
       results = results.filter((e) => e.proposer === proposer);
     }
 
+    if (q?.actionType !== undefined) {
+      const actionType = q.actionType;
+      results = results.filter((e) => e.action.type === actionType);
+    }
+
     if (q?.limit !== undefined) {
-      results = results.slice(0, q.limit);
+      results = results.slice(0, Math.max(0, q.limit));
     }
 
     return results.map((e) => structuredClone(e));

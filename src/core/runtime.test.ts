@@ -59,6 +59,66 @@ describe("Tegata runtime (skeleton)", () => {
     expect(log[0]?.decisions).toHaveLength(1);
   });
 
+  it("rejects empty proposer in propose()", async () => {
+    const tegata = new Tegata();
+
+    await expect(
+      tegata.propose({ proposer: "", action: { type: "x:y:read" } }),
+    ).rejects.toThrow("proposer must not be empty");
+  });
+
+  it("clones policy rules so external mutation has no effect", async () => {
+    const tegata = new Tegata();
+    const rule: Record<string, unknown> = {
+      match: "db:users:write",
+      tier: "review",
+    };
+    tegata.addPolicy(rule as never);
+
+    // Mutate the original object after registration
+    rule.tier = "auto";
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.tier).toBe("review");
+  });
+
+  it("filters audit log by actionType", async () => {
+    const tegata = new Tegata();
+
+    await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
+    await tegata.propose({ proposer: "bot", action: { type: "a:b:write" } });
+
+    const filtered = tegata.getAuditLog({ actionType: "a:b:write" });
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.action.type).toBe("a:b:write");
+  });
+
+  it("handles negative limit gracefully", async () => {
+    const tegata = new Tegata();
+    await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
+
+    const log = tegata.getAuditLog({ limit: -1 });
+    expect(log).toHaveLength(0);
+  });
+
+  it("preserves defaults when config has explicit undefined", async () => {
+    // Simulate a JS caller bypassing strict types
+    const config = JSON.parse('{"escalateAbove": null}');
+    const tegata = new Tegata(config);
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "ci:production:deploy", riskScore: 85 },
+    });
+
+    // Default escalateAbove is 70, so 85 should still escalate
+    expect(decision.status).toBe("escalated");
+  });
+
   it("rejects duplicate agent registration", () => {
     const tegata = new Tegata();
     const agent = {
