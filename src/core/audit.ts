@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { AuditEntry, AuditQuery } from "./types.js";
+import { globMatch } from "./policy-engine.js";
 
 /**
  * In-memory append-only audit store.
@@ -29,9 +30,8 @@ export class AuditStore {
   /**
    * Query the audit log.
    *
-   * Supports `since`, `proposer`, `actionType` (exact match),
-   * and `limit` filters. Glob matching for `actionType` will
-   * land with the policy engine.
+   * Supports `since`, `proposer`, `actionType` (glob match),
+   * and `limit` filters.
    *
    * @param q - Optional query filters.
    * @returns Matching entries, deep-cloned, in insertion order.
@@ -55,7 +55,7 @@ export class AuditStore {
 
     if (q?.actionType !== undefined) {
       const actionType = q.actionType;
-      results = results.filter((e) => e.action.type === actionType);
+      results = results.filter((e) => globMatch(actionType, e.action.type));
     }
 
     if (q?.limit !== undefined) {
