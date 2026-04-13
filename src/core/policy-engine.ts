@@ -28,6 +28,13 @@ export function globMatch(pattern: string, value: string): boolean {
   const patternSegments = pattern.split(":");
   const valueSegments = value.split(":");
 
+  if (
+    patternSegments.some((s) => s === "") ||
+    valueSegments.some((s) => s === "")
+  ) {
+    return false;
+  }
+
   if (patternSegments.length !== valueSegments.length) return false;
 
   return patternSegments.every(

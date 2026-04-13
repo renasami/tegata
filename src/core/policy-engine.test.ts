@@ -59,6 +59,14 @@ describe("globMatch", () => {
     expect(globMatch("", "")).toBe(false);
   });
 
+  it("rejects empty segment in value", () => {
+    expect(globMatch("db:*:write", "db::write")).toBe(false);
+  });
+
+  it("rejects empty segment in pattern", () => {
+    expect(globMatch("db::write", "db:users:write")).toBe(false);
+  });
+
   it("matches single-segment strings", () => {
     expect(globMatch("read", "read")).toBe(true);
   });
