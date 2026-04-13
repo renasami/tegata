@@ -7,7 +7,7 @@
 // ============================================================
 
 import type { AuditEntry, AuditQuery } from "./types.js";
-import { globMatch } from "./policy-engine.js";
+import { globMatch } from "./glob.js";
 
 /**
  * In-memory append-only audit store.

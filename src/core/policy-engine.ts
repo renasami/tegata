@@ -13,48 +13,7 @@ import type {
   ConsensusPolicy,
   PolicyRule,
 } from "./types.js";
-
-/**
- * Segment-level glob match. `*` matches exactly one segment.
- * Segments are delimited by `:`.
- *
- * @param pattern - Glob pattern (e.g. `"ci:*:deploy"`).
- * @param value - Concrete ActionType string to test.
- * @returns `true` if the pattern matches the value.
- */
-export function globMatch(pattern: string, value: string): boolean {
-  if (pattern === "" || value === "") return false;
-
-  const patternSegments = pattern.split(":");
-  const valueSegments = value.split(":");
-
-  if (
-    patternSegments.some((s) => s === "") ||
-    valueSegments.some((s) => s === "")
-  ) {
-    return false;
-  }
-
-  if (patternSegments.length !== valueSegments.length) return false;
-
-  return patternSegments.every(
-    (seg, i) => seg === "*" || seg === valueSegments[i],
-  );
-}
-
-/**
- * Check whether any capability pattern matches the given action type.
- *
- * @param capabilities - Array of glob patterns an agent holds.
- * @param actionType - The concrete ActionType to check.
- * @returns `true` if at least one capability matches.
- */
-export function matchesCapability(
-  capabilities: readonly string[],
-  actionType: string,
-): boolean {
-  return capabilities.some((cap) => globMatch(cap, actionType));
-}
+import { globMatch } from "./glob.js";
 
 /**
  * Result of resolving a policy for a given action.

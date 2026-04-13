@@ -1,11 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import type { PolicyRule } from "./types.js";
-import {
-  globMatch,
-  matchesCapability,
-  resolvePolicy,
-} from "./policy-engine.js";
+import { globMatch, matchesCapability } from "./glob.js";
+import { resolvePolicy } from "./policy-engine.js";
 import { Tegata } from "./runtime.js";
 
 // ----------------------------------------------------------------
