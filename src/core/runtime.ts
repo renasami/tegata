@@ -71,7 +71,7 @@ export class Tegata {
     if (this.agents.has(agent.id)) {
       return { ok: false, error: `agent "${agent.id}" already registered` };
     }
-    this.agents.set(agent.id, agent);
+    this.agents.set(agent.id, structuredClone(agent));
     return { ok: true, value: undefined };
   }
 
@@ -168,7 +168,7 @@ export class Tegata {
       proposal,
       status,
       tier: resolved.tier,
-      reviewers: resolved.reviewers,
+      reviewers: [...resolved.reviewers],
       reason,
       timestamp,
     };
@@ -189,7 +189,7 @@ export class Tegata {
   /**
    * Query the audit log.
    *
-   * @param query - Optional filters (`since`, `proposer`, `limit`).
+   * @param query - Optional filters (`since`, `proposer`, `actionType`, `limit`).
    * @returns Matching audit entries in insertion order.
    */
   getAuditLog(query?: AuditQuery): AuditEntry[] {

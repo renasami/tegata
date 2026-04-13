@@ -40,7 +40,11 @@ export class AuditStore {
     let results = this.entries;
 
     if (q?.since !== undefined) {
-      const sinceIso = new Date(q.since).toISOString();
+      const parsed = new Date(q.since);
+      if (Number.isNaN(parsed.getTime())) {
+        return [];
+      }
+      const sinceIso = parsed.toISOString();
       results = results.filter((e) => e.timestamp >= sinceIso);
     }
 

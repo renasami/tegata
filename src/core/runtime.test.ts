@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { PolicyRule } from "./types.js";
 import { Tegata } from "./runtime.js";
 
 describe("Tegata runtime (skeleton)", () => {
@@ -85,11 +86,8 @@ describe("Tegata runtime (skeleton)", () => {
 
   it("clones policy rules so external mutation has no effect", async () => {
     const tegata = new Tegata();
-    const rule: Record<string, unknown> = {
-      match: "db:users:write",
-      tier: "review",
-    };
-    tegata.addPolicy(rule as never);
+    const rule: PolicyRule = { match: "db:users:write", tier: "review" };
+    tegata.addPolicy(rule);
 
     // Mutate the original object after registration
     rule.tier = "auto";
@@ -150,5 +148,60 @@ describe("Tegata runtime (skeleton)", () => {
 
     expect(first.ok).toBe(true);
     expect(second.ok).toBe(false);
+  });
+
+  it("clones agent on registration so external mutation has no effect", () => {
+    const tegata = new Tegata();
+    const agent = {
+      id: "deploy-bot",
+      name: "Deploy Bot",
+      role: "proposer" as const,
+      capabilities: ["ci:*:read"],
+      maxApprovableRisk: 40,
+    };
+
+    tegata.registerAgent(agent);
+    agent.maxApprovableRisk = 100;
+    agent.capabilities.push("admin:*:*");
+
+    // Internal state should be unaffected (agent is used in v0.2+)
+    const second = tegata.registerAgent({
+      ...agent,
+      id: "deploy-bot",
+    });
+    expect(second.ok).toBe(false);
+  });
+
+  it("does not leak internal reviewers array via decision", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      reviewers: ["alice"],
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    // Mutate the returned reviewers
+    decision.reviewers.push("hacker");
+
+    // A second proposal should still see the original reviewers
+    const decision2 = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision2.reviewers).toEqual(["alice"]);
+  });
+
+  it("returns empty results for invalid since string", async () => {
+    const tegata = new Tegata();
+    await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
+
+    const log = tegata.getAuditLog({ since: "not-a-date" });
+    expect(log).toHaveLength(0);
   });
 });
