@@ -195,7 +195,7 @@ describe("resolvePolicy", () => {
 // ----------------------------------------------------------------
 
 describe("audit glob filter", () => {
-  it("filters audit log entries with glob actionType", async () => {
+  it("filters audit log events with glob actionType", async () => {
     const tegata = new Tegata();
 
     await tegata.propose({
@@ -212,11 +212,11 @@ describe("audit glob filter", () => {
     });
 
     const filtered = tegata.getAuditLog({ actionType: "db:*:write" });
-    expect(filtered).toHaveLength(2);
-    expect(filtered.map((e) => e.action.type)).toEqual([
-      "db:users:write",
-      "db:orders:write",
-    ]);
+    // 2 proposals × 2 events each = 4 events
+    expect(filtered).toHaveLength(4);
+    expect(
+      filtered.every((e) => e.proposal.action.type.endsWith(":write")),
+    ).toBe(true);
   });
 
   it("still supports exact actionType filter", async () => {
@@ -232,7 +232,8 @@ describe("audit glob filter", () => {
     });
 
     const filtered = tegata.getAuditLog({ actionType: "db:users:write" });
-    expect(filtered).toHaveLength(1);
-    expect(filtered[0]?.action.type).toBe("db:users:write");
+    // 1 proposal × 2 events = 2 events
+    expect(filtered).toHaveLength(2);
+    expect(filtered[0]?.proposal.action.type).toBe("db:users:write");
   });
 });

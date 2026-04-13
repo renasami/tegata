@@ -1,43 +1,45 @@
 // ============================================================
 // Tegata — Audit Store
 //
-// Append-only in-memory audit log. Exposed as a class so that
-// later versions can swap the backing store (SQLite, OpenTelemetry,
-// etc.) without touching the runtime.
+// Append-only in-memory event log. Each event is immutable once
+// recorded. Multiple events share a proposalId to form a
+// timeline. Exposed as a class so that later versions can swap
+// the backing store (SQLite, OpenTelemetry, etc.) without
+// touching the runtime.
 // ============================================================
 
-import type { AuditEntry, AuditQuery } from "./types.js";
+import type { AuditEvent, AuditQuery } from "./types.js";
 import { globMatch } from "./glob.js";
 
 /**
  * In-memory append-only audit store.
  *
- * Entries are deep-cloned on insertion and on read so that callers
+ * Events are deep-cloned on insertion and on read so that callers
  * cannot mutate the log after the fact.
  */
 export class AuditStore {
-  private readonly entries: AuditEntry[] = [];
+  private readonly events: AuditEvent[] = [];
 
   /**
-   * Append an entry to the audit log.
+   * Append an event to the audit log.
    *
-   * @param entry - The audit entry to record. Deep-cloned before storage.
+   * @param event - The audit event to record. Deep-cloned before storage.
    */
-  record(entry: AuditEntry): void {
-    this.entries.push(structuredClone(entry));
+  record(event: AuditEvent): void {
+    this.events.push(structuredClone(event));
   }
 
   /**
    * Query the audit log.
    *
    * Supports `since`, `proposer`, `actionType` (glob match),
-   * and `limit` filters.
+   * `proposalId`, and `limit` filters.
    *
    * @param q - Optional query filters.
-   * @returns Matching entries, deep-cloned, in insertion order.
+   * @returns Matching events, deep-cloned, in insertion order.
    */
-  query(q?: AuditQuery): AuditEntry[] {
-    let results = this.entries;
+  query(q?: AuditQuery): AuditEvent[] {
+    let results = this.events;
 
     if (q?.since !== undefined) {
       const parsed = new Date(q.since);
@@ -50,12 +52,19 @@ export class AuditStore {
 
     if (q?.proposer !== undefined) {
       const proposer = q.proposer;
-      results = results.filter((e) => e.proposer === proposer);
+      results = results.filter((e) => e.proposal.proposer === proposer);
     }
 
     if (q?.actionType !== undefined) {
       const actionType = q.actionType;
-      results = results.filter((e) => globMatch(actionType, e.action.type));
+      results = results.filter((e) =>
+        globMatch(actionType, e.proposal.action.type),
+      );
+    }
+
+    if (q?.proposalId !== undefined) {
+      const proposalId = q.proposalId;
+      results = results.filter((e) => e.proposalId === proposalId);
     }
 
     if (q?.limit !== undefined) {

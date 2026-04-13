@@ -13,7 +13,7 @@ import { AuditStore } from "./audit.js";
 import { resolvePolicy } from "./policy-engine.js";
 import type {
   AgentRegistration,
-  AuditEntry,
+  AuditEvent,
   AuditQuery,
   Decision,
   DecisionStatus,
@@ -96,7 +96,22 @@ export class Tegata {
    *
    * Resolves the applicable policy, checks the escalation threshold,
    * and dispatches on the resulting tier. Every proposal is recorded
-   * in the audit log before the decision is returned.
+   * in the audit log as one or more {@link AuditEvent} records.
+   *
+   * **Escalation threshold**: uses strict greater-than (`>`).
+   * `riskScore === escalateAbove` does NOT trigger escalation.
+   *
+   * **`riskScore` omitted**: threshold comparison is skipped entirely.
+   * The tier is determined solely by policy match or `defaultTier`.
+   * This distinguishes "unknown risk" from "zero risk" (`riskScore: 0`).
+   *
+   * **`notify` tier**: returns `status: "approved"`, same as `auto`.
+   * Callers should inspect `decision.tier === "notify"` to decide
+   * whether to emit post-execution notifications. Tegata does not
+   * send notifications itself.
+   *
+   * The method is async to accommodate future review/approve flows
+   * that will involve timeouts and external reviewer callbacks.
    *
    * @param proposal - The action being proposed.
    * @returns The decision. Status may be `approved`, `escalated`, or
@@ -130,6 +145,14 @@ export class Tegata {
     const proposalId = crypto.randomUUID();
     const timestamp = new Date().toISOString();
 
+    // Record the "proposed" event
+    this.audit.record({
+      proposalId,
+      eventType: "proposed",
+      proposal,
+      timestamp,
+    });
+
     const resolved = resolvePolicy(
       proposal.action,
       this.policies,
@@ -137,12 +160,13 @@ export class Tegata {
     );
 
     const threshold = resolved.escalateAbove ?? this.config.escalateAbove;
-    const riskScore = proposal.action.riskScore ?? 0;
+    const riskScore = proposal.action.riskScore;
 
     let status: DecisionStatus;
     let reason: string;
 
-    if (riskScore > threshold) {
+    // riskScore undefined → skip threshold comparison ("unknown ≠ zero")
+    if (riskScore !== undefined && riskScore > threshold) {
       status = "escalated";
       reason = "riskScore exceeds threshold";
     } else {
@@ -151,6 +175,8 @@ export class Tegata {
           status = "approved";
           reason = "auto-approved";
           break;
+        // notify: same as auto. Caller inspects decision.tier to decide
+        // whether to send post-execution notifications.
         case "notify":
           status = "approved";
           reason = "approved with notification";
@@ -173,15 +199,14 @@ export class Tegata {
       timestamp,
     };
 
-    const auditEntry: AuditEntry = {
+    // Record the "decided" (or "escalated") event
+    this.audit.record({
       proposalId,
-      proposer: proposal.proposer,
-      action: proposal.action,
-      decisions: [decision],
-      finalStatus: status,
+      eventType: status === "escalated" ? "escalated" : "decided",
+      proposal,
+      decision,
       timestamp,
-    };
-    this.audit.record(auditEntry);
+    });
 
     return decision;
   }
@@ -189,10 +214,11 @@ export class Tegata {
   /**
    * Query the audit log.
    *
-   * @param query - Optional filters (`since`, `proposer`, `actionType`, `limit`).
-   * @returns Matching audit entries in insertion order.
+   * @param query - Optional filters (`since`, `proposer`, `actionType`,
+   *   `proposalId`, `limit`).
+   * @returns Matching audit events in insertion order.
    */
-  getAuditLog(query?: AuditQuery): AuditEntry[] {
+  getAuditLog(query?: AuditQuery): AuditEvent[] {
     return this.audit.query(query);
   }
 }
