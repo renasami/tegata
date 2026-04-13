@@ -40,10 +40,8 @@ export class AuditStore {
     let results = this.entries;
 
     if (q?.since !== undefined) {
-      const sinceMs = new Date(q.since).getTime();
-      results = results.filter(
-        (e) => new Date(e.timestamp).getTime() >= sinceMs,
-      );
+      const sinceIso = new Date(q.since).toISOString();
+      results = results.filter((e) => e.timestamp >= sinceIso);
     }
 
     if (q?.proposer !== undefined) {

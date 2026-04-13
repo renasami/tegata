@@ -104,7 +104,15 @@ export class Tegata {
    */
   async propose(proposal: Proposal): Promise<Decision> {
     if (proposal.proposer === "") {
-      throw new Error("proposer must not be empty");
+      return {
+        proposalId: "",
+        proposal,
+        status: "denied",
+        tier: this.config.defaultTier,
+        reviewers: [],
+        reason: "proposer must not be empty",
+        timestamp: new Date().toISOString(),
+      };
     }
 
     const proposalId = crypto.randomUUID();

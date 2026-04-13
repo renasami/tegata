@@ -59,12 +59,16 @@ describe("Tegata runtime (skeleton)", () => {
     expect(log[0]?.decisions).toHaveLength(1);
   });
 
-  it("rejects empty proposer in propose()", async () => {
+  it("denies empty proposer in propose()", async () => {
     const tegata = new Tegata();
 
-    await expect(
-      tegata.propose({ proposer: "", action: { type: "x:y:read" } }),
-    ).rejects.toThrow("proposer must not be empty");
+    const decision = await tegata.propose({
+      proposer: "",
+      action: { type: "x:y:read" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toContain("proposer must not be empty");
   });
 
   it("clones policy rules so external mutation has no effect", async () => {
