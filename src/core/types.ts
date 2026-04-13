@@ -154,7 +154,12 @@ export type TegataConfig = {
 // Multiple events share the same proposalId to form a timeline.
 // ------------------------------------------------------------
 
-export type AuditEventType = "proposed" | "decided" | "escalated" | "timed_out";
+export type AuditEventType =
+  | "proposed"
+  | "decided"
+  | "pending"
+  | "escalated"
+  | "timed_out";
 
 export type AuditEvent = {
   /** Links this event to the proposal it belongs to. */

@@ -197,6 +197,21 @@ describe("Tegata runtime", () => {
     expect(log[0]?.proposalId).toBe(log[1]?.proposalId);
   });
 
+  it("records pending event type for review tier", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({ match: "db:users:write", tier: "review" });
+
+    await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    const log = tegata.getAuditLog();
+    expect(log).toHaveLength(2);
+    expect(log[0]?.eventType).toBe("proposed");
+    expect(log[1]?.eventType).toBe("pending");
+  });
+
   it("records escalated event type when escalated", async () => {
     const tegata = new Tegata();
 

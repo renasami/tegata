@@ -199,10 +199,16 @@ export class Tegata {
       timestamp,
     };
 
-    // Record the "decided" (or "escalated") event
+    // Record the decision event with the appropriate event type
+    const eventType =
+      status === "escalated"
+        ? "escalated"
+        : status === "pending"
+          ? "pending"
+          : "decided";
     this.audit.record({
       proposalId,
-      eventType: status === "escalated" ? "escalated" : "decided",
+      eventType,
       proposal,
       decision,
       timestamp,
