@@ -14,6 +14,7 @@ import { resolvePolicy } from "./policy-engine.js";
 import type {
   AgentRegistration,
   AuditEvent,
+  AuditEventType,
   AuditQuery,
   Decision,
   DecisionStatus,
@@ -199,16 +200,16 @@ export class Tegata {
       timestamp,
     };
 
-    // Record the decision event with the appropriate event type
-    const eventType =
-      status === "escalated"
-        ? "escalated"
-        : status === "pending"
-          ? "pending"
-          : "decided";
+    const statusToEventType: Record<DecisionStatus, AuditEventType> = {
+      approved: "decided",
+      denied: "decided",
+      escalated: "escalated",
+      pending: "pending",
+      timed_out: "timed_out",
+    };
     this.audit.record({
       proposalId,
-      eventType,
+      eventType: statusToEventType[status],
       proposal,
       decision,
       timestamp,
