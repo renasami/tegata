@@ -71,6 +71,18 @@ describe("Tegata runtime (skeleton)", () => {
     expect(decision.reason).toContain("proposer must not be empty");
   });
 
+  it("denies empty action type in propose()", async () => {
+    const tegata = new Tegata();
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toContain("action type must not be empty");
+  });
+
   it("clones policy rules so external mutation has no effect", async () => {
     const tegata = new Tegata();
     const rule: Record<string, unknown> = {

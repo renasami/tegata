@@ -115,6 +115,18 @@ export class Tegata {
       };
     }
 
+    if (proposal.action.type === "") {
+      return {
+        proposalId: "",
+        proposal,
+        status: "denied",
+        tier: this.config.defaultTier,
+        reviewers: [],
+        reason: "action type must not be empty",
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const proposalId = crypto.randomUUID();
     const timestamp = new Date().toISOString();
 
