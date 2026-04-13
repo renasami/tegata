@@ -49,7 +49,13 @@ export class Tegata {
    *   defaults — `new Tegata()` with zero config is supported.
    */
   constructor(config?: TegataConfig) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = {
+      defaultTier: config?.defaultTier ?? DEFAULT_CONFIG.defaultTier,
+      escalateAbove: config?.escalateAbove ?? DEFAULT_CONFIG.escalateAbove,
+      timeoutMs: config?.timeoutMs ?? DEFAULT_CONFIG.timeoutMs,
+      defaultOnTimeout:
+        config?.defaultOnTimeout ?? DEFAULT_CONFIG.defaultOnTimeout,
+    };
   }
 
   /**
@@ -81,7 +87,7 @@ export class Tegata {
     if (rule.match === "") {
       return { ok: false, error: "policy match pattern must not be empty" };
     }
-    this.policies.push(rule);
+    this.policies.push(structuredClone(rule));
     return { ok: true, value: undefined };
   }
 
@@ -97,6 +103,30 @@ export class Tegata {
    *   `pending` (for tiers not yet implemented in the skeleton).
    */
   async propose(proposal: Proposal): Promise<Decision> {
+    if (proposal.proposer === "") {
+      return {
+        proposalId: "",
+        proposal,
+        status: "denied",
+        tier: this.config.defaultTier,
+        reviewers: [],
+        reason: "proposer must not be empty",
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    if (proposal.action.type === "") {
+      return {
+        proposalId: "",
+        proposal,
+        status: "denied",
+        tier: this.config.defaultTier,
+        reviewers: [],
+        reason: "action type must not be empty",
+        timestamp: new Date().toISOString(),
+      };
+    }
+
     const proposalId = crypto.randomUUID();
     const timestamp = new Date().toISOString();
 
