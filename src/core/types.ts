@@ -147,32 +147,43 @@ export type TegataConfig = {
 };
 
 // ------------------------------------------------------------
-// Audit Log
+// Audit Log (event-sourcing model)
+//
+// Each call to propose() emits one or more AuditEvent records.
+// Events are append-only — never updated after creation.
+// Multiple events share the same proposalId to form a timeline.
 // ------------------------------------------------------------
 
-export type AuditEntry = {
-  /** Same as Decision.proposalId. */
+export type AuditEventType =
+  | "proposed"
+  | "decided"
+  | "pending"
+  | "escalated"
+  | "timed_out";
+
+export type AuditEvent = {
+  /** Links this event to the proposal it belongs to. */
   proposalId: string;
-  /** ID of the proposing agent. */
-  proposer: string;
-  /** The action that was proposed. */
-  action: Action;
-  /** Ordered list of decisions (may include intermediate escalations). */
-  decisions: Decision[];
-  /** Final status. */
-  finalStatus: DecisionStatus;
-  /** ISO-8601 timestamp of the initial proposal. */
+  /** What happened. */
+  eventType: AuditEventType;
+  /** The original proposal. Present on every event for queryability. */
+  proposal: Proposal;
+  /** The decision made. Present on "decided", "escalated", "timed_out". */
+  decision?: Decision;
+  /** ISO-8601 timestamp of this event. */
   timestamp: string;
 };
 
 export type AuditQuery = {
-  /** ISO-8601 date string — return entries on or after this date. */
+  /** ISO-8601 date string — return events on or after this date. */
   since?: string;
   /** Filter by proposer agent ID. */
   proposer?: string;
   /** Filter by action type (glob match). */
   actionType?: ActionType;
-  /** Maximum number of entries to return. */
+  /** Filter by proposal ID. */
+  proposalId?: string;
+  /** Maximum number of events to return. */
   limit?: number;
 };
 
