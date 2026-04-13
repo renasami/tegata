@@ -65,4 +65,4 @@ export interface Proposal {
 ## References
 
 - [OWASP Agentic Top 10 — ASI03: Identity & Privilege Abuse](https://genai.owasp.org/resource/agentic-ai-threats-and-mitigations/): Unattributed actions are a direct vector for privilege abuse
-- [NIST NCCoE — Agent Authorization](https://www.nccoe.nist.gov/ai/multi-agent-systems): "How does an agent prove it is authorized?" — requires knowing *who* is acting
+- [NIST NCCoE — Agent Authorization](https://www.nccoe.nist.gov/ai/multi-agent-systems): "How does an agent prove it is authorized?" — requires knowing _who_ is acting
