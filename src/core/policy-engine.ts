@@ -1,10 +1,10 @@
 // ============================================================
 // Tegata — Policy Engine
 //
-// Pure-function policy resolver. The skeleton implementation
-// performs exact-match only; glob matching is deferred to a
-// follow-up PR. The Cedar plugin (v0.2) will replace this
-// module wholesale, so keep the interface narrow and stable.
+// Pure-function policy resolver with segment-level glob matching.
+// ActionType strings use `domain:resource:operation` format;
+// `*` matches exactly one segment. The Cedar plugin (v0.2) will
+// replace this module wholesale, so keep the interface narrow.
 // ============================================================
 
 import type {
@@ -13,6 +13,7 @@ import type {
   ConsensusPolicy,
   PolicyRule,
 } from "./types.js";
+import { globMatch } from "./glob.js";
 
 /**
  * Result of resolving a policy for a given action.
@@ -29,8 +30,8 @@ export type ResolvedPolicy = {
 /**
  * Resolve which policy rule applies to an action.
  *
- * Skeleton behavior: returns the first rule whose `match` equals
- * `action.type` exactly. Glob matching will land in a follow-up PR.
+ * Returns the first rule whose `match` glob-matches `action.type`.
+ * Rules are evaluated in insertion order (first match wins).
  *
  * @param action - The action being proposed.
  * @param rules - Registered policy rules, in insertion order.
@@ -42,7 +43,7 @@ export function resolvePolicy(
   rules: PolicyRule[],
   defaultTier: ApprovalTier,
 ): ResolvedPolicy {
-  const matched = rules.find((r) => r.match === action.type);
+  const matched = rules.find((r) => globMatch(r.match, action.type));
 
   if (matched === undefined) {
     return {
