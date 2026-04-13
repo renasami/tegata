@@ -96,8 +96,10 @@ export class Tegata {
    * Propose an action for approval.
    *
    * Resolves the applicable policy, checks the escalation threshold,
-   * and dispatches on the resulting tier. Every proposal is recorded
+   * and dispatches on the resulting tier. Valid proposals are recorded
    * in the audit log as one or more {@link AuditEvent} records.
+   * Validation failures (empty proposer/action type) return a denied
+   * decision without an audit record.
    *
    * **Escalation threshold**: uses strict greater-than (`>`).
    * `riskScore === escalateAbove` does NOT trigger escalation.
@@ -207,12 +209,13 @@ export class Tegata {
       pending: "pending",
       timed_out: "timed_out",
     };
+    const decisionTimestamp = new Date().toISOString();
     this.audit.record({
       proposalId,
       eventType: statusToEventType[status],
       proposal,
       decision,
-      timestamp,
+      timestamp: decisionTimestamp,
     });
 
     return decision;
