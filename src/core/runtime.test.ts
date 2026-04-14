@@ -35,6 +35,13 @@ const slowHandler =
 const throwingHandler: ReviewHandler = () =>
   Promise.reject(new Error("connection refused"));
 
+const syncThrowingHandler: ReviewHandler = (() => {
+  // Non-async function that throws synchronously before returning a Promise
+  return (_proposal) => {
+    throw new Error("sync validation failed");
+  };
+})();
+
 describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
   // Basic approval flow
@@ -707,8 +714,7 @@ describe("Tegata runtime", () => {
     });
 
     expect(decision.status).toBe("denied");
-    expect(decision.reason).toContain("handler error");
-    expect(decision.reason).toContain("connection refused");
+    expect(decision.reason).toBe("handler error");
   });
 
   it("handler without reason → generates default reason", async () => {
@@ -747,5 +753,117 @@ describe("Tegata runtime", () => {
 
     expect(autoDecision.decidedBy).toBeUndefined();
     expect(notifyDecision.decidedBy).toBeUndefined();
+  });
+
+  // ----------------------------------------------------------------
+  // Handler safety (LLM/agent hardening)
+  // ----------------------------------------------------------------
+
+  it("handler that throws synchronously → denied (not unhandled rejection)", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: syncThrowingHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toBe("handler error");
+  });
+
+  it("handler cannot mutate the proposal object", async () => {
+    const mutatingHandler: ReviewHandler = async (p) => {
+      // Attempt to mutate the proposal
+      p.action.riskScore = 0;
+      (p as Record<string, unknown>).proposer = "hacked";
+      return { status: "approved", decidedBy: "reviewer" };
+    };
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: mutatingHandler,
+    });
+
+    const original = {
+      proposer: "bot",
+      action: { type: "db:users:write" as const, riskScore: 50 },
+    };
+    const decision = await tegata.propose(original);
+
+    expect(decision.status).toBe("approved");
+    // The original proposal in the decision must be unmodified
+    expect(decision.proposal.proposer).toBe("bot");
+    expect(decision.proposal.action.riskScore).toBe(50);
+  });
+
+  it("handler returning invalid status → denied", async () => {
+    const badStatusHandler: ReviewHandler = async () =>
+      // Simulate JS caller returning invalid shape
+      ({ status: "escalated", decidedBy: "reviewer" }) as never;
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: badStatusHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toBe("handler returned invalid result");
+  });
+
+  it("handler returning empty decidedBy → denied", async () => {
+    const emptyDeciderHandler: ReviewHandler = async () => ({
+      status: "approved",
+      decidedBy: "",
+    });
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: emptyDeciderHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toBe("handler returned invalid result");
+  });
+
+  it("handler error does not leak raw error message into decision", async () => {
+    const leakyHandler: ReviewHandler = () =>
+      Promise.reject(new Error("secret-api-key-12345: auth failed"));
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: leakyHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toBe("handler error");
+    expect(decision.reason).not.toContain("secret");
   });
 });

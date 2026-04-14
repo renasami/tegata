@@ -120,12 +120,20 @@ export class Tegata {
   /**
    * Execute a review/approve handler with timeout.
    *
-   * Uses `Promise.race` to enforce the timeout. Handler errors are
-   * caught via `.then(onFulfilled, onRejected)` to comply with
-   * `functional/no-try-statements`.
+   * Uses `Promise.race` to enforce the timeout. The handler call is
+   * wrapped in `Promise.resolve().then(...)` so that synchronous
+   * throws (e.g. input validation in a non-async handler) are caught
+   * on the same Result path as async rejections.
+   *
+   * The proposal is deep-cloned before being passed to the handler
+   * to prevent mutation of the original object.
+   *
+   * **Note**: timeout does not cancel the handler — it may continue
+   * running after `Promise.race` resolves. Handler authors that need
+   * cancellation should accept an `AbortSignal` internally.
    *
    * @param handler - The handler function to invoke.
-   * @param proposal - The proposal to pass to the handler.
+   * @param proposal - The proposal to pass to the handler (cloned).
    * @param timeoutMs - Timeout in milliseconds.
    * @returns `Ok<ReviewResult>` on success; `Err` on timeout or handler error.
    */
@@ -142,13 +150,34 @@ export class Tegata {
       }, timeoutMs);
     });
 
-    const handlerPromise = handler(proposal).then(
-      (result): Result<ReviewResult> => ({ ok: true, value: result }),
-      (err: unknown): Result<ReviewResult> => ({
-        ok: false,
-        error: err instanceof Error ? err.message : "handler error",
-      }),
-    );
+    const handlerPromise = Promise.resolve()
+      .then(() => handler(structuredClone(proposal)))
+      .then(
+        (result: unknown): Result<ReviewResult> => {
+          const r = result as Record<string, unknown> | null | undefined;
+          if (
+            r === null ||
+            r === undefined ||
+            (r.status !== "approved" && r.status !== "denied") ||
+            typeof r.decidedBy !== "string" ||
+            r.decidedBy === ""
+          ) {
+            return { ok: false, error: "invalid result" };
+          }
+          const value: ReviewResult = {
+            status: r.status,
+            decidedBy: r.decidedBy,
+          };
+          if (typeof r.reason === "string") {
+            value.reason = r.reason;
+          }
+          return { ok: true, value };
+        },
+        (err: unknown): Result<ReviewResult> => ({
+          ok: false,
+          error: err instanceof Error ? err.message : "handler error",
+        }),
+      );
 
     return Promise.race([handlerPromise, timeoutPromise]).then((result) => {
       clearTimeout(timer);
@@ -381,9 +410,12 @@ export class Tegata {
             status = "timed_out";
             reason = "review timed out";
           }
+        } else if (handlerResult.error === "invalid result") {
+          status = "denied";
+          reason = "handler returned invalid result";
         } else {
           status = "denied";
-          reason = `handler error: ${handlerResult.error}`;
+          reason = "handler error";
         }
         break;
       }
