@@ -64,6 +64,7 @@ describe("Tegata runtime", () => {
 
     expect(decision.status).toBe("denied");
     expect(decision.reason).toContain("proposer must not be empty");
+    expect(decision.proposalId).toBeTruthy();
   });
 
   it("denies empty action type in propose()", async () => {
@@ -76,6 +77,37 @@ describe("Tegata runtime", () => {
 
     expect(decision.status).toBe("denied");
     expect(decision.reason).toContain("action type must not be empty");
+    expect(decision.proposalId).toBeTruthy();
+  });
+
+  it("records audit event for empty proposer denial", async () => {
+    const tegata = new Tegata();
+
+    const decision = await tegata.propose({
+      proposer: "",
+      action: { type: "x:y:read" },
+    });
+
+    const log = tegata.getAuditLog();
+    expect(log).toHaveLength(1);
+    expect(log[0]?.eventType).toBe("decided");
+    expect(log[0]?.proposalId).toBe(decision.proposalId);
+    expect(log[0]?.decision?.status).toBe("denied");
+  });
+
+  it("records audit event for empty action type denial", async () => {
+    const tegata = new Tegata();
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "" },
+    });
+
+    const log = tegata.getAuditLog();
+    expect(log).toHaveLength(1);
+    expect(log[0]?.eventType).toBe("decided");
+    expect(log[0]?.proposalId).toBe(decision.proposalId);
+    expect(log[0]?.decision?.status).toBe("denied");
   });
 
   // ----------------------------------------------------------------
@@ -370,5 +402,99 @@ describe("Tegata runtime", () => {
 
     const log = tegata.getAuditLog({ since: "not-a-date" });
     expect(log).toHaveLength(0);
+  });
+
+  // ----------------------------------------------------------------
+  // Agent capabilities check in propose()
+  // ----------------------------------------------------------------
+
+  it("registered agent with matching capability proceeds normally", async () => {
+    const tegata = new Tegata();
+    tegata.registerAgent({
+      id: "ci-bot",
+      name: "CI Bot",
+      role: "proposer",
+      capabilities: ["ci:staging:deploy"],
+      maxApprovableRisk: 80,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "ci-bot",
+      action: { type: "ci:staging:deploy", riskScore: 30 },
+    });
+
+    expect(decision.status).toBe("approved");
+    expect(decision.reason).toBe("auto-approved");
+  });
+
+  it("registered agent without matching capability is escalated", async () => {
+    const tegata = new Tegata();
+    tegata.registerAgent({
+      id: "ci-bot",
+      name: "CI Bot",
+      role: "proposer",
+      capabilities: ["ci:staging:deploy"],
+      maxApprovableRisk: 80,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "ci-bot",
+      action: { type: "ci:production:deploy", riskScore: 30 },
+    });
+
+    expect(decision.status).toBe("escalated");
+    expect(decision.reason).toContain("lacks capability");
+  });
+
+  it("registered agent with riskScore exceeding maxApprovableRisk is escalated", async () => {
+    const tegata = new Tegata();
+    tegata.registerAgent({
+      id: "ci-bot",
+      name: "CI Bot",
+      role: "proposer",
+      capabilities: ["ci:*:deploy"],
+      maxApprovableRisk: 40,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "ci-bot",
+      action: { type: "ci:production:deploy", riskScore: 50 },
+    });
+
+    expect(decision.status).toBe("escalated");
+    expect(decision.reason).toContain("maxApprovableRisk");
+  });
+
+  it("unregistered proposer skips capability check (zero-config)", async () => {
+    const tegata = new Tegata();
+    // No agent registered — "unknown-bot" is not in the agent registry
+
+    const decision = await tegata.propose({
+      proposer: "unknown-bot",
+      action: { type: "ci:production:deploy", riskScore: 30 },
+    });
+
+    // Should proceed to normal flow (auto-approved since riskScore < 70)
+    expect(decision.status).toBe("approved");
+    expect(decision.reason).toBe("auto-approved");
+  });
+
+  it("registered agent with wildcard capability matches everything", async () => {
+    const tegata = new Tegata();
+    tegata.registerAgent({
+      id: "admin-bot",
+      name: "Admin Bot",
+      role: "supervisor",
+      capabilities: ["*:*:*"],
+      maxApprovableRisk: 100,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "admin-bot",
+      action: { type: "db:users:delete", riskScore: 50 },
+    });
+
+    expect(decision.status).toBe("approved");
+    expect(decision.reason).toBe("auto-approved");
   });
 });

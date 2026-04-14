@@ -10,6 +10,7 @@
 // ============================================================
 
 import { AuditStore } from "./audit.js";
+import { matchesCapability } from "./glob.js";
 import { resolvePolicy } from "./policy-engine.js";
 import type {
   AgentRegistration,
@@ -98,8 +99,8 @@ export class Tegata {
    * Resolves the applicable policy, checks the escalation threshold,
    * and dispatches on the resulting tier. Valid proposals are recorded
    * in the audit log as one or more {@link AuditEvent} records.
-   * Validation failures (empty proposer/action type) return a denied
-   * decision without an audit record.
+   * Every call to propose() is recorded in the audit log, including
+   * validation failures.
    *
    * **Escalation threshold**: uses strict greater-than (`>`).
    * `riskScore === escalateAbove` does NOT trigger escalation.
@@ -122,27 +123,47 @@ export class Tegata {
    */
   async propose(proposal: Proposal): Promise<Decision> {
     if (proposal.proposer === "") {
-      return {
-        proposalId: "",
+      const validationId = crypto.randomUUID();
+      const validationTimestamp = new Date().toISOString();
+      const decision: Decision = {
+        proposalId: validationId,
         proposal,
         status: "denied",
         tier: this.config.defaultTier,
         reviewers: [],
         reason: "proposer must not be empty",
-        timestamp: new Date().toISOString(),
+        timestamp: validationTimestamp,
       };
+      this.audit.record({
+        proposalId: validationId,
+        eventType: "decided",
+        proposal,
+        decision,
+        timestamp: validationTimestamp,
+      });
+      return decision;
     }
 
     if (proposal.action.type === "") {
-      return {
-        proposalId: "",
+      const validationId = crypto.randomUUID();
+      const validationTimestamp = new Date().toISOString();
+      const decision: Decision = {
+        proposalId: validationId,
         proposal,
         status: "denied",
         tier: this.config.defaultTier,
         reviewers: [],
         reason: "action type must not be empty",
-        timestamp: new Date().toISOString(),
+        timestamp: validationTimestamp,
       };
+      this.audit.record({
+        proposalId: validationId,
+        eventType: "decided",
+        proposal,
+        decision,
+        timestamp: validationTimestamp,
+      });
+      return decision;
     }
 
     const proposalId = crypto.randomUUID();
@@ -161,6 +182,58 @@ export class Tegata {
       this.policies,
       this.config.defaultTier,
     );
+
+    // Agent capability check (only if proposer is registered)
+    const agent = this.agents.get(proposal.proposer);
+    if (agent !== undefined) {
+      if (!matchesCapability(agent.capabilities, proposal.action.type)) {
+        const capDecision: Decision = {
+          proposalId,
+          proposal,
+          status: "escalated",
+          tier: resolved.tier,
+          reviewers: [...resolved.reviewers],
+          reason: "proposer lacks capability for this action type",
+          timestamp,
+        };
+
+        this.audit.record({
+          proposalId,
+          eventType: "escalated",
+          proposal,
+          decision: capDecision,
+          timestamp: new Date().toISOString(),
+        });
+
+        return capDecision;
+      }
+
+      const agentRiskScore = proposal.action.riskScore;
+      if (
+        agentRiskScore !== undefined &&
+        agentRiskScore > agent.maxApprovableRisk
+      ) {
+        const riskDecision: Decision = {
+          proposalId,
+          proposal,
+          status: "escalated",
+          tier: resolved.tier,
+          reviewers: [...resolved.reviewers],
+          reason: "riskScore exceeds agent's maxApprovableRisk",
+          timestamp,
+        };
+
+        this.audit.record({
+          proposalId,
+          eventType: "escalated",
+          proposal,
+          decision: riskDecision,
+          timestamp: new Date().toISOString(),
+        });
+
+        return riskDecision;
+      }
+    }
 
     const threshold = resolved.escalateAbove ?? this.config.escalateAbove;
     const riskScore = proposal.action.riskScore;
