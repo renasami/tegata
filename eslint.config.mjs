@@ -2,10 +2,12 @@ import tseslint from "typescript-eslint";
 import functional from "eslint-plugin-functional";
 
 export default tseslint.config(
-  // Ignore build output
+  // Ignore build output and config files without tsconfig coverage
   { ignores: ["dist/", "node_modules/", "vitest.config.ts"] },
 
-  // Base: strict type-checked rules
+  // Base: strict type-checked rules (includes no-explicit-any, no-unsafe-*,
+  // no-floating-promises, no-misused-promises, await-thenable,
+  // prefer-promise-reject-errors, restrict-template-expressions, etc.)
   ...tseslint.configs.strictTypeChecked,
 
   // Typed linting setup
@@ -18,7 +20,7 @@ export default tseslint.config(
     },
   },
 
-  // Project rules for all TS files
+  // Project rules for all TS files (overrides / additions to preset)
   {
     rules: {
       // Type definitions: type only, no interface
@@ -35,20 +37,15 @@ export default tseslint.config(
         { allowDefaultCaseForExhaustiveSwitch: false },
       ],
 
-      // Strict boolean checks
-      "@typescript-eslint/strict-boolean-expressions": "error",
-
-      // Promise safety
-      "@typescript-eslint/no-floating-promises": "error",
-      "@typescript-eslint/no-misused-promises": "error",
-      "@typescript-eslint/await-thenable": "error",
-      "@typescript-eslint/prefer-promise-reject-errors": "error",
+      // Strict boolean checks (allow nullable object/boolean to reduce
+      // boilerplate with optional fields like riskScore?, description?)
+      "@typescript-eslint/strict-boolean-expressions": [
+        "error",
+        { allowNullableObject: true, allowNullableBoolean: true },
+      ],
 
       // Nullish coalescing over ||
       "@typescript-eslint/prefer-nullish-coalescing": "error",
-
-      // Template literal safety
-      "@typescript-eslint/restrict-template-expressions": "error",
 
       // Unused vars (allow _ prefix for intentional ignores)
       "@typescript-eslint/no-unused-vars": [
@@ -56,18 +53,35 @@ export default tseslint.config(
         { argsIgnorePattern: "^_" },
       ],
 
-      // Allow async without await (propose() is intentionally async for future use)
+      // Off: some methods are async for future await points (review/approve flows)
       "@typescript-eslint/require-await": "off",
     },
   },
 
-  // No-throw enforcement: core only
+  // Public API must have explicit return types for stable .d.ts output
   {
-    files: ["src/core/**/*.ts"],
-    ignores: ["src/core/**/*.test.ts"],
+    files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts"],
+    rules: {
+      "@typescript-eslint/explicit-module-boundary-types": "error",
+    },
+  },
+
+  // No-throw enforcement: all src (SDK contract — Result pattern only)
+  {
+    files: ["src/**/*.ts"],
+    ignores: ["src/**/*.test.ts"],
     plugins: { functional },
     rules: {
       "functional/no-throw-statements": "error",
+    },
+  },
+
+  // No-try enforcement: core only (bindings may catch third-party errors)
+  {
+    files: ["src/core/**/*.ts"],
+    ignores: ["src/core/**/*.test.ts"],
+    rules: {
       "functional/no-try-statements": "error",
     },
   },
