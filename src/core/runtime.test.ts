@@ -1,7 +1,39 @@
 import { describe, expect, it } from "vitest";
 
-import type { PolicyRule, TegataConfig } from "./types.js";
+import type {
+  ApprovalHandler,
+  PolicyRule,
+  ReviewHandler,
+  TegataConfig,
+} from "./types.js";
 import { Tegata } from "./runtime.js";
+
+// ----------------------------------------------------------------
+// Test helpers
+// ----------------------------------------------------------------
+
+const noopReviewHandler: ReviewHandler = async () => ({
+  status: "approved",
+  decidedBy: "test-reviewer",
+});
+
+const denyingHandler: ReviewHandler = async () => ({
+  status: "denied",
+  decidedBy: "test-reviewer",
+  reason: "policy violation",
+});
+
+const slowHandler =
+  (delayMs: number): ReviewHandler =>
+  () =>
+    new Promise((resolve) => {
+      setTimeout(() => {
+        resolve({ status: "approved", decidedBy: "slow-reviewer" });
+      }, delayMs);
+    });
+
+const throwingHandler: ReviewHandler = () =>
+  Promise.reject(new Error("connection refused"));
 
 describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
@@ -19,6 +51,7 @@ describe("Tegata runtime", () => {
     expect(decision.status).toBe("approved");
     expect(decision.tier).toBe("auto");
     expect(decision.proposalId).toBeTruthy();
+    expect(decision.decidedBy).toBeUndefined();
   });
 
   it("escalates when riskScore exceeds the default threshold", async () => {
@@ -30,24 +63,6 @@ describe("Tegata runtime", () => {
     });
 
     expect(decision.status).toBe("escalated");
-  });
-
-  it("returns pending for review tier (not yet implemented)", async () => {
-    const tegata = new Tegata();
-    const added = tegata.addPolicy({
-      match: "db:users:write",
-      tier: "review",
-    });
-    expect(added.ok).toBe(true);
-
-    const decision = await tegata.propose({
-      proposer: "bot",
-      action: { type: "db:users:write" },
-    });
-
-    expect(decision.status).toBe("pending");
-    expect(decision.tier).toBe("review");
-    expect(decision.reason).toContain("not yet implemented");
   });
 
   // ----------------------------------------------------------------
@@ -229,9 +244,13 @@ describe("Tegata runtime", () => {
     expect(log[0]?.proposalId).toBe(log[1]?.proposalId);
   });
 
-  it("records pending event type for review tier", async () => {
+  it("records proposed + pending + decided events for review tier", async () => {
     const tegata = new Tegata();
-    tegata.addPolicy({ match: "db:users:write", tier: "review" });
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: noopReviewHandler,
+    });
 
     await tegata.propose({
       proposer: "bot",
@@ -239,9 +258,10 @@ describe("Tegata runtime", () => {
     });
 
     const log = tegata.getAuditLog();
-    expect(log).toHaveLength(2);
+    expect(log).toHaveLength(3);
     expect(log[0]?.eventType).toBe("proposed");
     expect(log[1]?.eventType).toBe("pending");
+    expect(log[2]?.eventType).toBe("decided");
   });
 
   it("records escalated event type when escalated", async () => {
@@ -357,11 +377,15 @@ describe("Tegata runtime", () => {
 
   it("clones policy rules so external mutation has no effect", async () => {
     const tegata = new Tegata();
-    const rule: PolicyRule = { match: "db:users:write", tier: "review" };
+    const rule: PolicyRule = {
+      match: "db:users:write",
+      tier: "review",
+      handler: noopReviewHandler,
+    };
     tegata.addPolicy(rule);
 
     // Mutate the original object after registration
-    rule.tier = "auto";
+    (rule as Record<string, unknown>).tier = "auto";
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -377,6 +401,7 @@ describe("Tegata runtime", () => {
       match: "db:users:write",
       tier: "review",
       reviewers: ["alice"],
+      handler: noopReviewHandler,
     });
 
     const decision = await tegata.propose({
@@ -517,5 +542,210 @@ describe("Tegata runtime", () => {
     // but riskScore (80) > global escalateAbove (70) → escalated
     expect(decision.status).toBe("escalated");
     expect(decision.reason).toContain("threshold");
+  });
+
+  // ----------------------------------------------------------------
+  // Review / Approve handler flow
+  // ----------------------------------------------------------------
+
+  it("review handler approved → Decision.status=approved with decidedBy", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: noopReviewHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("approved");
+    expect(decision.tier).toBe("review");
+    expect(decision.decidedBy).toBe("test-reviewer");
+  });
+
+  it("review handler denied → Decision.status=denied", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: denyingHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.decidedBy).toBe("test-reviewer");
+    expect(decision.reason).toBe("policy violation");
+  });
+
+  it("approve handler approved → tier=approve", async () => {
+    const approveHandler: ApprovalHandler = async () => ({
+      status: "approved",
+      decidedBy: "human-admin",
+      reason: "looks good",
+    });
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "finance:*:transfer",
+      tier: "approve",
+      handler: approveHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "finance:account:transfer" },
+    });
+
+    expect(decision.status).toBe("approved");
+    expect(decision.tier).toBe("approve");
+    expect(decision.decidedBy).toBe("human-admin");
+    expect(decision.reason).toBe("looks good");
+  });
+
+  it("handler timeout + defaultOnTimeout=deny → timed_out", async () => {
+    const tegata = new Tegata({
+      timeoutMs: 50,
+      defaultOnTimeout: "deny",
+    });
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: slowHandler(500),
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("timed_out");
+    expect(decision.reason).toContain("timed out");
+  });
+
+  it("handler timeout + defaultOnTimeout=escalate → escalated", async () => {
+    const tegata = new Tegata({
+      timeoutMs: 50,
+      defaultOnTimeout: "escalate",
+    });
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: slowHandler(500),
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("escalated");
+    expect(decision.reason).toContain("timed out");
+  });
+
+  it("policy-level timeoutMs overrides config", async () => {
+    const tegata = new Tegata({
+      timeoutMs: 10_000, // config: long timeout
+      defaultOnTimeout: "deny",
+    });
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: slowHandler(500),
+      timeoutMs: 50, // policy: short timeout
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("timed_out");
+  });
+
+  it("escalateAbove bypasses handler (handler not called)", async () => {
+    let handlerCalled = false;
+    const trackingHandler: ReviewHandler = async () => {
+      handlerCalled = true;
+      return { status: "approved", decidedBy: "test-reviewer" };
+    };
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: trackingHandler,
+      escalateAbove: 50,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write", riskScore: 60 },
+    });
+
+    expect(decision.status).toBe("escalated");
+    expect(handlerCalled).toBe(false);
+  });
+
+  it("handler error → denied with error reason", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: throwingHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.status).toBe("denied");
+    expect(decision.reason).toContain("handler error");
+    expect(decision.reason).toContain("connection refused");
+  });
+
+  it("handler without reason → generates default reason", async () => {
+    const noReasonHandler: ReviewHandler = async () => ({
+      status: "approved",
+      decidedBy: "auto-reviewer",
+    });
+
+    const tegata = new Tegata();
+    tegata.addPolicy({
+      match: "db:users:write",
+      tier: "review",
+      handler: noReasonHandler,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "db:users:write" },
+    });
+
+    expect(decision.reason).toBe("approved by auto-reviewer");
+  });
+
+  it("auto/notify tier → decidedBy is undefined", async () => {
+    const tegata = new Tegata();
+    tegata.addPolicy({ match: "slack:*:post", tier: "notify" });
+
+    const autoDecision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "x:y:read" },
+    });
+    const notifyDecision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "slack:channel:post" },
+    });
+
+    expect(autoDecision.decidedBy).toBeUndefined();
+    expect(notifyDecision.decidedBy).toBeUndefined();
   });
 });
