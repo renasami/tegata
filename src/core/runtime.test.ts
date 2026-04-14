@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { PolicyRule } from "./types.js";
+import type { PolicyRule, TegataConfig } from "./types.js";
 import { Tegata } from "./runtime.js";
 
 describe("Tegata runtime", () => {
@@ -264,8 +264,8 @@ describe("Tegata runtime", () => {
 
   it("preserves defaults when config has explicit undefined", async () => {
     // Simulate a JS caller bypassing strict types
-    const config = JSON.parse('{"escalateAbove": null}');
-    const tegata = new Tegata(config);
+    const config: unknown = JSON.parse('{"escalateAbove": null}');
+    const tegata = new Tegata(config as TegataConfig);
 
     const decision = await tegata.propose({
       proposer: "bot",
