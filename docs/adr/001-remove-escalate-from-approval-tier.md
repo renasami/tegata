@@ -9,7 +9,12 @@
 Tegata's README documents 5 approval tiers: `auto`, `notify`, `review`, `approve`, `escalate`. The initial `types.ts` implemented this as:
 
 ```typescript
-export type ApprovalTier = "auto" | "notify" | "review" | "approve" | "escalate";
+export type ApprovalTier =
+  | "auto"
+  | "notify"
+  | "review"
+  | "approve"
+  | "escalate";
 ```
 
 However, `auto` through `approve` answer "who decides?" — they describe the authorization level required. `escalate` answers "what happened?" — it describes a runtime transition when the current decision-maker cannot handle the proposal (e.g., riskScore exceeds `escalateAbove`, or the reviewer lacks capability).
