@@ -497,4 +497,25 @@ describe("Tegata runtime", () => {
     expect(decision.status).toBe("approved");
     expect(decision.reason).toBe("auto-approved");
   });
+
+  it("registered agent still respects global escalateAbove after agent checks pass", async () => {
+    const tegata = new Tegata({ escalateAbove: 70 });
+    tegata.registerAgent({
+      id: "ci-bot",
+      name: "CI Bot",
+      role: "proposer",
+      capabilities: ["ci:*:deploy"],
+      maxApprovableRisk: 90,
+    });
+
+    const decision = await tegata.propose({
+      proposer: "ci-bot",
+      action: { type: "ci:production:deploy", riskScore: 80 },
+    });
+
+    // capability matches, riskScore (80) < maxApprovableRisk (90),
+    // but riskScore (80) > global escalateAbove (70) → escalated
+    expect(decision.status).toBe("escalated");
+    expect(decision.reason).toContain("threshold");
+  });
 });
