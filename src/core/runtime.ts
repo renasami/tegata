@@ -22,6 +22,7 @@ import type {
   PolicyRule,
   Proposal,
   Result,
+  ReviewResult,
   TegataConfig,
 } from "./types.js";
 
@@ -31,6 +32,29 @@ const DEFAULT_CONFIG: Required<TegataConfig> = {
   timeoutMs: 30_000,
   defaultOnTimeout: "deny",
 };
+
+/**
+ * Clone a PolicyRule without breaking function references.
+ *
+ * `structuredClone` throws on functions, so review/approve
+ * policies must be handled specially: data fields are cloned,
+ * handler reference is preserved as-is.
+ *
+ * @param rule - The policy rule to clone.
+ * @returns A shallow-safe clone of the rule.
+ */
+function clonePolicyRule(rule: PolicyRule): PolicyRule {
+  switch (rule.tier) {
+    case "auto":
+    case "notify":
+      return structuredClone(rule);
+    case "review":
+    case "approve": {
+      const { handler, ...data } = rule;
+      return { ...structuredClone(data), handler } as PolicyRule;
+    }
+  }
+}
 
 /**
  * Main Tegata runtime.
@@ -89,8 +113,76 @@ export class Tegata {
     if (rule.match === "") {
       return { ok: false, error: "policy match pattern must not be empty" };
     }
-    this.policies.push(structuredClone(rule));
+    this.policies.push(clonePolicyRule(rule));
     return { ok: true, value: undefined };
+  }
+
+  /**
+   * Execute a review/approve handler with timeout.
+   *
+   * Uses `Promise.race` to enforce the timeout. The handler call is
+   * wrapped in `Promise.resolve().then(...)` so that synchronous
+   * throws (e.g. input validation in a non-async handler) are caught
+   * on the same Result path as async rejections.
+   *
+   * The proposal is deep-cloned before being passed to the handler
+   * to prevent mutation of the original object.
+   *
+   * **Note**: timeout does not cancel the handler — it may continue
+   * running after `Promise.race` resolves. Handler authors that need
+   * cancellation should accept an `AbortSignal` internally.
+   *
+   * @param handler - The handler function to invoke.
+   * @param proposal - The proposal to pass to the handler (cloned).
+   * @param timeoutMs - Timeout in milliseconds.
+   * @returns `Ok<ReviewResult>` on success; `Err` on timeout or handler error.
+   */
+  private executeHandler(
+    handler: (proposal: Proposal) => Promise<ReviewResult>,
+    proposal: Proposal,
+    timeoutMs: number,
+  ): Promise<Result<ReviewResult>> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const timeoutPromise = new Promise<Result<ReviewResult>>((resolve) => {
+      timer = setTimeout(() => {
+        resolve({ ok: false, error: "timeout" });
+      }, timeoutMs);
+    });
+
+    const handlerPromise = Promise.resolve()
+      .then(() => handler(structuredClone(proposal)))
+      .then(
+        (result: unknown): Result<ReviewResult> => {
+          const r = result as Record<string, unknown> | null | undefined;
+          if (
+            r === null ||
+            r === undefined ||
+            (r.status !== "approved" && r.status !== "denied") ||
+            typeof r.decidedBy !== "string" ||
+            r.decidedBy === ""
+          ) {
+            return { ok: false, error: "invalid result" };
+          }
+          const value: ReviewResult = {
+            status: r.status,
+            decidedBy: r.decidedBy,
+          };
+          if (typeof r.reason === "string") {
+            value.reason = r.reason;
+          }
+          return { ok: true, value };
+        },
+        (err: unknown): Result<ReviewResult> => ({
+          ok: false,
+          error: err instanceof Error ? err.message : "handler error",
+        }),
+      );
+
+    return Promise.race([handlerPromise, timeoutPromise]).then((result) => {
+      clearTimeout(timer);
+      return result;
+    });
   }
 
   /**
@@ -114,12 +206,11 @@ export class Tegata {
    * whether to emit post-execution notifications. Tegata does not
    * send notifications itself.
    *
-   * The method is async to accommodate future review/approve flows
-   * that will involve timeouts and external reviewer callbacks.
+   * **`review` / `approve` tiers**: invokes the handler defined on
+   * the matching policy. Subject to timeout via `Promise.race`.
    *
    * @param proposal - The action being proposed.
-   * @returns The decision. Status may be `approved`, `escalated`, or
-   *   `pending` (for tiers not yet implemented in the skeleton).
+   * @returns The decision.
    */
   async propose(proposal: Proposal): Promise<Decision> {
     if (proposal.proposer === "") {
@@ -131,6 +222,7 @@ export class Tegata {
         status: "denied",
         tier: this.config.defaultTier,
         reviewers: [],
+        decidedBy: undefined,
         reason: "proposer must not be empty",
         timestamp: validationTimestamp,
       };
@@ -153,6 +245,7 @@ export class Tegata {
         status: "denied",
         tier: this.config.defaultTier,
         reviewers: [],
+        decidedBy: undefined,
         reason: "action type must not be empty",
         timestamp: validationTimestamp,
       };
@@ -193,6 +286,7 @@ export class Tegata {
           status: "escalated",
           tier: resolved.tier,
           reviewers: [...resolved.reviewers],
+          decidedBy: undefined,
           reason: "proposer lacks capability for this action type",
           timestamp,
         };
@@ -219,6 +313,7 @@ export class Tegata {
           status: "escalated",
           tier: resolved.tier,
           reviewers: [...resolved.reviewers],
+          decidedBy: undefined,
           reason: "riskScore exceeds agent's maxApprovableRisk",
           timestamp,
         };
@@ -238,30 +333,91 @@ export class Tegata {
     const threshold = resolved.escalateAbove ?? this.config.escalateAbove;
     const riskScore = proposal.action.riskScore;
 
-    let status: DecisionStatus;
-    let reason: string;
-
     // riskScore undefined → skip threshold comparison ("unknown ≠ zero")
     if (riskScore !== undefined && riskScore > threshold) {
-      status = "escalated";
-      reason = "riskScore exceeds threshold";
-    } else {
-      switch (resolved.tier) {
-        case "auto":
-          status = "approved";
-          reason = "auto-approved";
+      const escalatedDecision: Decision = {
+        proposalId,
+        proposal,
+        status: "escalated",
+        tier: resolved.tier,
+        reviewers: [...resolved.reviewers],
+        decidedBy: undefined,
+        reason: "riskScore exceeds threshold",
+        timestamp,
+      };
+
+      this.audit.record({
+        proposalId,
+        eventType: "escalated",
+        proposal,
+        decision: escalatedDecision,
+        timestamp: new Date().toISOString(),
+      });
+
+      return escalatedDecision;
+    }
+
+    let status: DecisionStatus;
+    let reason: string;
+    let decidedBy: string | undefined = undefined;
+
+    switch (resolved.tier) {
+      case "auto":
+        status = "approved";
+        reason = "auto-approved";
+        break;
+      // notify: same as auto. Caller inspects decision.tier to decide
+      // whether to send post-execution notifications.
+      case "notify":
+        status = "approved";
+        reason = "approved with notification";
+        break;
+      case "review":
+      case "approve": {
+        if (resolved.handler === undefined) {
+          // Type-level unreachable for TS callers, but JS callers may omit handler
+          status = "denied";
+          reason = "no handler configured for this policy";
           break;
-        // notify: same as auto. Caller inspects decision.tier to decide
-        // whether to send post-execution notifications.
-        case "notify":
-          status = "approved";
-          reason = "approved with notification";
-          break;
-        case "review":
-        case "approve":
-          status = "pending";
-          reason = "tier not yet implemented in skeleton";
-          break;
+        }
+
+        // Record "pending" event before invoking handler
+        this.audit.record({
+          proposalId,
+          eventType: "pending",
+          proposal,
+          timestamp: new Date().toISOString(),
+        });
+
+        const timeoutMs = resolved.timeoutMs ?? this.config.timeoutMs;
+        const handlerResult = await this.executeHandler(
+          resolved.handler,
+          proposal,
+          timeoutMs,
+        );
+
+        if (handlerResult.ok) {
+          status = handlerResult.value.status;
+          decidedBy = handlerResult.value.decidedBy;
+          reason =
+            handlerResult.value.reason ??
+            `${handlerResult.value.status} by ${handlerResult.value.decidedBy}`;
+        } else if (handlerResult.error === "timeout") {
+          if (this.config.defaultOnTimeout === "escalate") {
+            status = "escalated";
+            reason = "review timed out — escalated";
+          } else {
+            status = "timed_out";
+            reason = "review timed out";
+          }
+        } else if (handlerResult.error === "invalid result") {
+          status = "denied";
+          reason = "handler returned invalid result";
+        } else {
+          status = "denied";
+          reason = "handler error";
+        }
+        break;
       }
     }
 
@@ -271,6 +427,7 @@ export class Tegata {
       status,
       tier: resolved.tier,
       reviewers: [...resolved.reviewers],
+      decidedBy,
       reason,
       timestamp,
     };

@@ -94,6 +94,32 @@ export type Proposal = {
 };
 
 // ------------------------------------------------------------
+// Review / Approval handler types
+// ------------------------------------------------------------
+
+/** Result returned by a review or approval handler. */
+export type ReviewResult = {
+  /** Whether the proposal was approved or denied. */
+  status: "approved" | "denied";
+  /** Who made the decision (agent ID or human identifier). */
+  decidedBy: string;
+  /** Optional reason for the decision. */
+  reason?: string;
+};
+
+/**
+ * Handler invoked when a `review` tier policy matches.
+ * Returns a decision from an agent reviewer.
+ */
+export type ReviewHandler = (proposal: Proposal) => Promise<ReviewResult>;
+
+/**
+ * Handler invoked when an `approve` tier policy matches.
+ * Returns a decision from a human approver.
+ */
+export type ApprovalHandler = (proposal: Proposal) => Promise<ReviewResult>;
+
+// ------------------------------------------------------------
 // Decision (returned by propose())
 // ------------------------------------------------------------
 
@@ -108,6 +134,8 @@ export type Decision = {
   tier: ApprovalTier;
   /** IDs of agents/humans that reviewed (if any). */
   reviewers: string[];
+  /** Who made the final decision. Set by review/approve handlers; undefined for auto/notify. */
+  decidedBy: string | undefined;
   /** Human-readable reason for the decision. */
   reason?: string;
   /** ISO-8601 timestamp. */
@@ -115,21 +143,52 @@ export type Decision = {
 };
 
 // ------------------------------------------------------------
-// Policy Rule
+// Policy Rule (discriminated union on `tier`)
 // ------------------------------------------------------------
 
-export type PolicyRule = {
+/** Policy for auto/notify tiers — no handler required. */
+export type AutoPolicy = {
   /** Glob pattern matched against ActionType. */
   match: ActionType;
-  /** Approval tier to require for matching actions. */
-  tier: ApprovalTier;
-  /** Consensus policy when multiple reviewers are involved. */
-  consensus?: ConsensusPolicy;
+  /** Approval tier. */
+  tier: "auto" | "notify";
+};
+
+/** Policy for review tier — handler required. */
+export type ReviewPolicy = {
+  /** Glob pattern matched against ActionType. */
+  match: ActionType;
+  /** Approval tier. */
+  tier: "review";
   /** Agent IDs that should review matching actions. */
   reviewers?: string[];
+  /** Consensus policy when multiple reviewers are involved. */
+  consensus?: ConsensusPolicy;
+  /** Handler invoked to obtain a review decision. */
+  handler: ReviewHandler;
   /** Override: escalate if riskScore exceeds this threshold. */
   escalateAbove?: number;
+  /** Per-policy timeout override (ms). Falls back to TegataConfig.timeoutMs. */
+  timeoutMs?: number;
 };
+
+/** Policy for approve tier — handler required. */
+export type ApprovePolicy = {
+  /** Glob pattern matched against ActionType. */
+  match: ActionType;
+  /** Approval tier. */
+  tier: "approve";
+  /** Agent/human IDs that should approve matching actions. */
+  approvers?: string[];
+  /** Handler invoked to obtain an approval decision. */
+  handler: ApprovalHandler;
+  /** Override: escalate if riskScore exceeds this threshold. */
+  escalateAbove?: number;
+  /** Per-policy timeout override (ms). Falls back to TegataConfig.timeoutMs. */
+  timeoutMs?: number;
+};
+
+export type PolicyRule = AutoPolicy | ReviewPolicy | ApprovePolicy;
 
 // ------------------------------------------------------------
 // Tegata Config

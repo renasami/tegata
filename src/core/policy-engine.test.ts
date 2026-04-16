@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { PolicyRule } from "./types.js";
+import type { PolicyRule, ReviewHandler } from "./types.js";
 import { globMatch, matchesCapability } from "./glob.js";
 import { resolvePolicy } from "./policy-engine.js";
 import { Tegata } from "./runtime.js";
+
+const noopHandler: ReviewHandler = async () => ({
+  status: "approved",
+  decidedBy: "test-reviewer",
+});
 
 // ----------------------------------------------------------------
 // globMatch
@@ -118,7 +123,9 @@ describe("matchesCapability", () => {
 
 describe("resolvePolicy", () => {
   it("matches a glob pattern rule", () => {
-    const rules: PolicyRule[] = [{ match: "db:*:write", tier: "approve" }];
+    const rules: PolicyRule[] = [
+      { match: "db:*:write", tier: "approve", handler: noopHandler },
+    ];
     const result = resolvePolicy({ type: "db:users:write" }, rules, "auto");
     expect(result.tier).toBe("approve");
     expect(result.matchedRule).toBe(rules[0]);
@@ -126,8 +133,8 @@ describe("resolvePolicy", () => {
 
   it("uses first-match priority", () => {
     const rules: PolicyRule[] = [
-      { match: "ci:*:deploy", tier: "review" },
-      { match: "ci:production:deploy", tier: "approve" },
+      { match: "ci:*:deploy", tier: "review", handler: noopHandler },
+      { match: "ci:production:deploy", tier: "approve", handler: noopHandler },
     ];
     const result = resolvePolicy(
       { type: "ci:production:deploy" },
@@ -146,7 +153,9 @@ describe("resolvePolicy", () => {
   });
 
   it("falls back to default tier when no rule matches", () => {
-    const rules: PolicyRule[] = [{ match: "db:*:write", tier: "approve" }];
+    const rules: PolicyRule[] = [
+      { match: "db:*:write", tier: "approve", handler: noopHandler },
+    ];
     const result = resolvePolicy(
       { type: "ci:staging:deploy" },
       rules,
@@ -157,33 +166,72 @@ describe("resolvePolicy", () => {
   });
 
   it("matches all-wildcard pattern", () => {
-    const rules: PolicyRule[] = [{ match: "*:*:*", tier: "review" }];
+    const rules: PolicyRule[] = [
+      { match: "*:*:*", tier: "review", handler: noopHandler },
+    ];
     const result = resolvePolicy({ type: "anything:goes:here" }, rules, "auto");
     expect(result.tier).toBe("review");
   });
 
-  it("returns correct ResolvedPolicy shape", () => {
+  it("returns correct ResolvedPolicy shape for review tier", () => {
     const rules: PolicyRule[] = [
       {
         match: "db:*:write",
-        tier: "approve",
+        tier: "review",
         consensus: "majority",
         reviewers: ["db-admin", "sre-lead"],
         escalateAbove: 80,
+        handler: noopHandler,
+        timeoutMs: 5000,
       },
     ];
     const result = resolvePolicy({ type: "db:users:write" }, rules, "auto");
-    expect(result).toEqual({
-      tier: "approve",
-      reviewers: ["db-admin", "sre-lead"],
-      consensus: "majority",
-      escalateAbove: 80,
-      matchedRule: rules[0],
-    });
+    expect(result.tier).toBe("review");
+    expect(result.reviewers).toEqual(["db-admin", "sre-lead"]);
+    expect(result.consensus).toBe("majority");
+    expect(result.escalateAbove).toBe(80);
+    expect(result.handler).toBe(noopHandler);
+    expect(result.timeoutMs).toBe(5000);
+    expect(result.matchedRule).toBe(rules[0]);
+  });
+
+  it("returns correct ResolvedPolicy shape for approve tier", () => {
+    const rules: PolicyRule[] = [
+      {
+        match: "db:*:delete",
+        tier: "approve",
+        approvers: ["db-admin"],
+        escalateAbove: 60,
+        handler: noopHandler,
+        timeoutMs: 10000,
+      },
+    ];
+    const result = resolvePolicy({ type: "db:users:delete" }, rules, "auto");
+    expect(result.tier).toBe("approve");
+    // approvers mapped to reviewers in ResolvedPolicy
+    expect(result.reviewers).toEqual(["db-admin"]);
+    expect(result.escalateAbove).toBe(60);
+    expect(result.handler).toBe(noopHandler);
+    expect(result.timeoutMs).toBe(10000);
+  });
+
+  it("returns undefined handler/timeoutMs for auto tier", () => {
+    const rules: PolicyRule[] = [{ match: "x:y:read", tier: "auto" }];
+    const result = resolvePolicy({ type: "x:y:read" }, rules, "auto");
+    expect(result.handler).toBeUndefined();
+    expect(result.timeoutMs).toBeUndefined();
+  });
+
+  it("returns undefined handler/timeoutMs for no-match default", () => {
+    const result = resolvePolicy({ type: "x:y:read" }, [], "auto");
+    expect(result.handler).toBeUndefined();
+    expect(result.timeoutMs).toBeUndefined();
   });
 
   it("does not match when segment count differs", () => {
-    const rules: PolicyRule[] = [{ match: "ci:*", tier: "approve" }];
+    const rules: PolicyRule[] = [
+      { match: "ci:*", tier: "approve", handler: noopHandler },
+    ];
     const result = resolvePolicy({ type: "ci:staging:deploy" }, rules, "auto");
     expect(result.tier).toBe("auto");
     expect(result.matchedRule).toBeUndefined();

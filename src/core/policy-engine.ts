@@ -9,9 +9,11 @@
 
 import type {
   Action,
+  ApprovalHandler,
   ApprovalTier,
   ConsensusPolicy,
   PolicyRule,
+  ReviewHandler,
 } from "./types.js";
 import { globMatch } from "./glob.js";
 
@@ -25,6 +27,10 @@ export type ResolvedPolicy = {
   consensus: ConsensusPolicy;
   escalateAbove: number | undefined;
   matchedRule: PolicyRule | undefined;
+  /** Handler for review/approve tiers. `undefined` for auto/notify or no match. */
+  handler: ReviewHandler | ApprovalHandler | undefined;
+  /** Per-policy timeout override. `undefined` when not set or auto/notify tier. */
+  timeoutMs: number | undefined;
 };
 
 /**
@@ -52,14 +58,42 @@ export function resolvePolicy(
       consensus: "single",
       escalateAbove: undefined,
       matchedRule: undefined,
+      handler: undefined,
+      timeoutMs: undefined,
     };
   }
 
-  return {
-    tier: matched.tier,
-    reviewers: matched.reviewers ?? [],
-    consensus: matched.consensus ?? "single",
-    escalateAbove: matched.escalateAbove,
-    matchedRule: matched,
-  };
+  switch (matched.tier) {
+    case "auto":
+    case "notify":
+      return {
+        tier: matched.tier,
+        reviewers: [],
+        consensus: "single",
+        escalateAbove: undefined,
+        matchedRule: matched,
+        handler: undefined,
+        timeoutMs: undefined,
+      };
+    case "review":
+      return {
+        tier: matched.tier,
+        reviewers: matched.reviewers ?? [],
+        consensus: matched.consensus ?? "single",
+        escalateAbove: matched.escalateAbove,
+        matchedRule: matched,
+        handler: matched.handler,
+        timeoutMs: matched.timeoutMs,
+      };
+    case "approve":
+      return {
+        tier: matched.tier,
+        reviewers: matched.approvers ?? [],
+        consensus: "single",
+        escalateAbove: matched.escalateAbove,
+        matchedRule: matched,
+        handler: matched.handler,
+        timeoutMs: matched.timeoutMs,
+      };
+  }
 }
