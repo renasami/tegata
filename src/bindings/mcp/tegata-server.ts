@@ -158,12 +158,18 @@ export class TegataServer {
           );
         }
 
-        // Handler approved — execute original
-        try {
-          const result = (handler as (...a: unknown[]) => unknown)(
-            ...handlerArgs,
-          );
-          return Promise.resolve(result as CallToolResult).catch(
+        // Handler approved — execute original.
+        // Wrap in Promise.resolve().then() so sync throws and async
+        // rejections are caught in a single chain (same pattern as
+        // core executeHandler).
+        return Promise.resolve()
+          .then(
+            () =>
+              (handler as (...a: unknown[]) => unknown)(
+                ...handlerArgs,
+              ) as CallToolResult,
+          )
+          .catch(
             (err: unknown): CallToolResult => ({
               content: [
                 {
@@ -174,20 +180,13 @@ export class TegataServer {
               isError: true,
             }),
           );
-        } catch (err: unknown) {
-          return Promise.resolve({
-            content: [
-              {
-                type: "text",
-                text: `Tool handler error: ${err instanceof Error ? err.message : "unknown error"}`,
-              },
-            ],
-            isError: true,
-          } satisfies CallToolResult);
-        }
       });
     };
 
+    // Cast narrows generic InputArgs to satisfy registerTool's signature.
+    // The inputSchema *value* is preserved and passed through — only the
+    // TypeScript generic parameter is erased. MCP SDK validates at runtime
+    // using the schema value, so this is safe.
     return this.mcp.registerTool(
       name,
       toolConfig as ToolConfig<undefined>,
