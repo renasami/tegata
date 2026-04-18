@@ -3,7 +3,7 @@ import functional from "eslint-plugin-functional";
 
 export default tseslint.config(
   // Ignore build output and config files without tsconfig coverage
-  { ignores: ["dist/", "node_modules/", "vitest.config.ts"] },
+  { ignores: ["dist/", "node_modules/", "examples/", "vitest.config.ts"] },
 
   // Base: strict type-checked rules (includes no-explicit-any, no-unsafe-*,
   // no-floating-promises, no-misused-promises, await-thenable,
