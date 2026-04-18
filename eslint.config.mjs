@@ -3,7 +3,7 @@ import functional from "eslint-plugin-functional";
 
 export default tseslint.config(
   // Ignore build output and config files without tsconfig coverage
-  { ignores: ["dist/", "node_modules/", "examples/", "vitest.config.ts"] },
+  { ignores: ["dist/", "node_modules/", "vitest.config.ts"] },
 
   // Base: strict type-checked rules (includes no-explicit-any, no-unsafe-*,
   // no-floating-promises, no-misused-promises, await-thenable,
@@ -90,5 +90,16 @@ export default tseslint.config(
   {
     files: ["**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
+  },
+
+  // Examples: lint style/safety rules but skip type-aware rules — the
+  // `examples/` directory sits outside tsconfig's `include: ["src"]`,
+  // so `projectService` has no program for these files.
+  {
+    files: ["examples/**/*.ts"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: { projectService: false, project: null },
+    },
   },
 );
