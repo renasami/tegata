@@ -173,9 +173,9 @@ export class Tegata {
           }
           return { ok: true, value };
         },
-        (err: unknown): Result<ReviewResult> => ({
+        (_err: unknown): Result<ReviewResult> => ({
           ok: false,
-          error: err instanceof Error ? err.message : "handler error",
+          error: "handler_error",
         }),
       );
 
@@ -213,6 +213,9 @@ export class Tegata {
    * @returns The decision.
    */
   async propose(proposal: Proposal): Promise<Decision> {
+    // Deep-clone to prevent external mutation from corrupting audit log / decisions
+    proposal = structuredClone(proposal);
+
     if (proposal.proposer === "") {
       const validationId = crypto.randomUUID();
       const validationTimestamp = new Date().toISOString();
