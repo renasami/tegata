@@ -19,6 +19,7 @@ import { Tegata } from "tegata";
 const tegata = new Tegata();
 
 const result = await tegata.propose({
+  proposer: "cleanup-bot",
   action: { type: "db:users:delete", riskScore: 90, reversible: false },
   params: { userId: "all" },
 });
