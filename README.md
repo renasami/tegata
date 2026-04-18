@@ -2,6 +2,8 @@
 
 **Enforceable authorization for MCP tool calls.**
 
+> **Status: Preview (v0.1.0-preview).** Core runtime, policy engine, and MCP tool call intercept are working and tested. The API is **not frozen** until the v0.1.0 GA release — breaking changes may ship in subsequent preview versions. Trust Score and Consensus policies beyond `single`/`majority` are specified but not yet implemented. Install with `npm install tegata@preview`.
+
 MCP tool annotations like `readOnlyHint` are just hints — nothing stops a malicious server from declaring `readOnlyHint: true` and deleting your database. A2A explicitly marks authorization as ["implementation-specific"](https://github.com/a2aproject/A2A/blob/main/docs/specification.md). OWASP, NIST, and CSA all flag this gap but define no solution. Tegata fills it.
 
 > **Name origin**: Tegata (手形) — Edo-period travel permits that certified a traveler's identity and authorized passage through checkpoints. Tegata does the same for AI agents.

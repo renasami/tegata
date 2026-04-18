@@ -1,6 +1,6 @@
 {
   "name": "tegata",
-  "version": "0.1.0",
+  "version": "0.1.0-preview.0",
   "description": "Enforceable authorization for MCP tool calls",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,6 +15,32 @@
       "types": "./dist/bindings/mcp/index.d.ts"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "authorization",
+    "agent",
+    "approval",
+    "governance",
+    "audit",
+    "ai-safety",
+    "human-in-the-loop"
+  ],
+  "author": "Ren Asami <60680416+renasami@users.noreply.github.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/renasami/tegata.git"
+  },
+  "homepage": "https://github.com/renasami/tegata#readme",
+  "bugs": {
+    "url": "https://github.com/renasami/tegata/issues"
+  },
   "peerDependencies": {
     "@modelcontextprotocol/sdk": ">=1.12.0"
   },
@@ -24,15 +50,19 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "prettier --check . && eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "prepublishOnly": "pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "publishConfig": {
+    "access": "public",
+    "tag": "preview"
   },
   "packageManager": "pnpm@10.11.0",
-  "license": "Apache-2.0",
   "devDependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@types/node": "^22.14.1",
