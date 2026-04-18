@@ -91,4 +91,15 @@ export default tseslint.config(
     files: ["**/*.mjs"],
     ...tseslint.configs.disableTypeChecked,
   },
+
+  // Examples: lint style/safety rules but skip type-aware rules — the
+  // `examples/` directory sits outside tsconfig's `include: ["src"]`,
+  // so `projectService` has no program for these files.
+  {
+    files: ["examples/**/*.ts"],
+    ...tseslint.configs.disableTypeChecked,
+    languageOptions: {
+      parserOptions: { projectService: false, project: null },
+    },
+  },
 );
