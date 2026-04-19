@@ -84,6 +84,8 @@ const decision = await tegata.propose({
 // → Escalated to supervisor agent or human reviewer
 ```
 
+`proposer` is a required string identifying who is requesting the action — typically an agent id (`"deploy-bot"`), but any identifier works (`"human"`, `"ci-runner"`). Tegata rejects anonymous proposals because every audit-trail entry must carry attribution; unattributed actions defeat the point of a governance SDK. See [ADR-002](docs/adr/002-require-proposer-in-proposal.md) for the rationale.
+
 ## Core Features
 
 ### Tiered Approval (MUST)
