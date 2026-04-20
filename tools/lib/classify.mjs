@@ -24,9 +24,15 @@ export const classifyBash = (cmd) => {
   if (/^git\s+push\b/.test(c)) return { type: "shell:git:push", riskScore: 71 };
   if (/^git\s+reset\s+--hard\b/.test(c))
     return { type: "shell:git:reset-hard", riskScore: 85 };
+  // `git clean` is destructive only when force is present AND dry-run is not.
+  // Accept both short `-f` (possibly clustered, e.g. `-fd`, `-fdx`) and long
+  // `--force`. Suppress classification when `-n` / `--dry-run` is present —
+  // those are preview-only and must not escalate in enforce mode.
   if (
     /^git\s+branch\s+-D\b/.test(c) ||
-    /^git\s+clean\b(?=.*(?:^|\s)-[a-z]*f[a-z]*)/.test(c)
+    (/^git\s+clean\b/.test(c) &&
+      /(?:^|\s)(?:--force\b|-[a-z]*f[a-z]*)/.test(c) &&
+      !/(?:^|\s)(?:--dry-run\b|-[a-z]*n[a-z]*)/.test(c))
   )
     return { type: "shell:git:destructive", riskScore: 75 };
   if (
@@ -42,8 +48,9 @@ export const classifyBash = (cmd) => {
   // Anchored to start to avoid matching `rm -rf` inside a commit message etc.
   // Handles any number of flag blocks in any order: `rm -rf`, `rm -fr`,
   // `rm -rfv`, `rm -r -f`, `rm -f -v -r`, `rm --recursive`, `sudo rm -rf`.
+  // Accept both lowercase `-r` and uppercase `-R` (POSIX recognizes both).
   if (
-    /^(?:sudo\s+)?rm\s+(?:-[a-z]+\s+)*(?:-[a-z]*r[a-z]*|--recursive)(?:\s|$)/.test(
+    /^(?:sudo\s+)?rm\s+(?:-[A-Za-z]+\s+)*(?:-[A-Za-z]*[rR][A-Za-z]*|--recursive)(?:\s|$)/.test(
       c,
     )
   )
@@ -56,7 +63,13 @@ export const classifyBash = (cmd) => {
     // ~/.bashrc` writes to disk, so it's not a read. Covers `>`, `>>`, `&>`,
     // `2>`, `2>>`. Accepts false positives (`ls | grep >file` etc. fall to
     // generic) in exchange for never mislabeling a write as a read.
-    !/(?:^|[^0-9])(?:&>|[0-9]*>)/.test(c)
+    !/(?:^|[^0-9])(?:&>|[0-9]*>)/.test(c) &&
+    // Also bail out on any shell composition — `&&`, `||`, `;`, `|`, command
+    // substitution (`$(...)`, backticks), or newlines. `cat x && rm y` has a
+    // read prefix but is not safe to classify as a read; fall through to
+    // generic so the riskScore stays at 30 rather than 5.
+    !/(?:&&|\|\||;|\|)/.test(c) &&
+    !/(?:\$\(|`|\n)/.test(c)
   )
     return { type: "shell:read:query", riskScore: 5 };
   if (/^(npm|pnpm|yarn|npx)\s+(run\s+)?(test|typecheck|lint|build)\b/.test(c))

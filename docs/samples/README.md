@@ -20,8 +20,9 @@ talk material.
    `ActionType` + `riskScore` and passed through `tegata.propose()` with
    `proposer: "claude-code"`.
 3. Each decision was appended to `~/.claude/tegata-audit.jsonl`.
-4. `SHADOW_MODE=1` — all tool calls were allowed regardless of verdict;
-   the log records what Tegata _would_ have blocked in enforce mode.
+4. Shadow mode (the default — `TEGATA_HOOK_ENFORCE` was not set) — all
+   tool calls were allowed regardless of verdict; the log records what
+   Tegata _would_ have blocked in enforce mode.
 
 ## Summary (generated from this file)
 
@@ -66,7 +67,11 @@ Top action types by volume:
 - **`git push` alone (not `--force`) is correctly escalated.**
   riskScore 71 exceeds the default `escalateAbove: 70` threshold using
   strict `>`. This is the fix from PR #15 — previously this would have
-  auto-approved.
+  auto-approved. Note: a handful of entries earlier in the log still
+  show `risk_score: 70 / decision_status: approved` because they were
+  captured against the pre-fix classifier. Those rows are kept as
+  historical evidence of _why_ the fix was needed, not as current
+  behavior.
 - **Classification gaps are visible.** `unknown:ToolSearch:exec`
   appears in the log (5 occurrences) — Claude Code's deferred-tool
   lookup isn't in the classifier yet. This is the kind of real-world

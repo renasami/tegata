@@ -23,6 +23,15 @@ const lines = readFileSync(path, "utf8")
 const entries = lines.map((l) => JSON.parse(l));
 
 const total = entries.length;
+if (total === 0) {
+  console.log(`File:         ${path}`);
+  console.log("Range:        (empty)");
+  console.log("Total:        0");
+  console.log("Approved:     0 (n/a)  [auto-pass]");
+  console.log("Escalated:    0 (n/a)  [human/senior needed]");
+  console.log("Denied:       0 (n/a)");
+  process.exit(0);
+}
 const approved = entries.filter((e) => e.decision_status === "approved").length;
 const escalated = entries.filter(
   (e) => e.decision_status === "escalated",
