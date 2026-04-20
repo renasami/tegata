@@ -19,10 +19,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const SHADOW_MODE = process.env["TEGATA_HOOK_ENFORCE"] !== "1";
 const AUDIT_PATH = join(homedir(), ".claude", "tegata-audit.jsonl");
 
-// Always exit 0 on any unexpected error — the hook must never degrade UX.
-const safeExit = (code) => {
-  if (SHADOW_MODE) process.exit(0);
-  process.exit(code);
+// Fail-open: on any unexpected internal error (bad stdin JSON, missing dist,
+// etc.) we allow the tool call through even in enforce mode. This is a
+// deliberate dogfooding trade-off — a broken hook must never wedge the host
+// agent. If Tegata's own evaluation returns denied/escalated, that path is
+// handled separately below and DOES block in enforce mode.
+const safeExit = (_code) => {
+  process.exit(0);
 };
 
 // ---------------------------------------------------------------

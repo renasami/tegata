@@ -144,6 +144,12 @@ cat ~/.claude/tegata-audit.jsonl \
   through to `exit 0`. Worst case: you lose a log line.
 - Missing or broken `dist/` → hook silently no-ops.
 - Audit log writes are best-effort; disk errors don't break the hook.
+- Each tool call spawns `node` + imports `dist/index.js`, adding roughly
+  100–300 ms per hook fire. Acceptable for shadow-mode dogfooding; a
+  long-lived daemon is planned for heavier use.
+- `~/.claude/tegata-audit.jsonl` is append-only and grows unbounded. It's
+  safe to rotate or truncate any time — `logrotate`, `: > file`, or plain
+  `rm` all work. Nothing else reads this file.
 
 This is deliberately conservative: dogfooding Tegata should never degrade
 the host agent's reliability. If Tegata itself has a bug, Claude Code keeps
