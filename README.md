@@ -176,6 +176,14 @@ Tegata's design maps directly to emerging AI governance requirements:
 - **California SB-833** (Jul 2026): Mandates pre-execution review of AI-proposed actions in critical infrastructure. Tegata's tiered approval fulfills this with `review`/`approve` tiers.
 - **NIST NCCoE**: Asks "how does an agent prove it is authorized to perform a specific action?" — this is exactly what Tegata defines.
 
+## Dogfooding
+
+The author runs Tegata against his own Claude Code tool calls via a
+`PreToolUse` hook — every `Bash`, `Edit`, `Write`, MCP call, or subagent
+spawn is classified into an `Action` and passed through `tegata.propose()`.
+See [docs/dogfooding.md](docs/dogfooding.md) for the setup; replicable on
+any machine running Claude Code in a few minutes.
+
 ## Roadmap
 
 - **v0.1** (Current): Agent → Tool authorization (MCP tool call intercept)
