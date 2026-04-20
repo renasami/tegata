@@ -46,6 +46,10 @@ describe("classifyBash: rm recursive", () => {
     "rm -rfv /tmp/x",
     "rm -r -f /tmp/x",
     "rm -f -r /tmp/x",
+    // 3+ flag blocks in arbitrary order — the regex uses `(?:-[a-z]+\s+)*`
+    // to consume leading flag blocks before finding one containing `r`.
+    "rm -f -v -r /tmp/x",
+    "rm -v -f -r /tmp/x",
     "rm --recursive /tmp/x",
     "sudo rm -rf /tmp/x",
   ])("%s → shell:fs:delete-recursive", (cmd) => {
@@ -77,6 +81,11 @@ describe("classifyBash: git reset / destructive", () => {
     ["git reset --hard HEAD~1", "shell:git:reset-hard", 85],
     ["git branch -D feature-x", "shell:git:destructive", 75],
     ["git clean -f", "shell:git:destructive", 75],
+    // Common combined forms — lookahead scans the whole tail so both orderings
+    // of `-f` and `-d` trip the destructive bucket.
+    ["git clean -fd", "shell:git:destructive", 75],
+    ["git clean -df", "shell:git:destructive", 75],
+    ["git clean -fdx", "shell:git:destructive", 75],
   ])("%s → %s / %i", (cmd, type, riskScore) => {
     expect(bashCase(cmd)).toEqual({ type, riskScore });
   });
@@ -147,6 +156,9 @@ describe("classifyBash: package-manager / test", () => {
     "pnpm add lodash",
     "pnpm uninstall foo",
     "npm publish",
+    "npm ci",
+    "pnpm ci",
+    "yarn ci",
     "yarn add react",
   ])("%s → shell:pkg:mutate", (cmd) => {
     expect(bashCase(cmd)).toEqual({ type: "shell:pkg:mutate", riskScore: 55 });
@@ -168,7 +180,21 @@ describe("classifyBash: gh CLI", () => {
     ["gh pr diff 15", "shell:gh:read", 10],
     ["gh run view 42", "shell:gh:read", 10],
     ["gh api repos/owner/repo", "shell:gh:read", 10],
+    ["gh api -X GET repos/o/r", "shell:gh:read", 10],
   ])("%s → %s / %i", (cmd, type, riskScore) => {
+    expect(bashCase(cmd)).toEqual({ type, riskScore });
+  });
+
+  // `gh api` with a mutating method or field flag must classify as write,
+  // not read — this is the ordering fix from PR #16 review.
+  it.each([
+    ["gh api -X POST repos/o/r/issues", "shell:gh:write", 50],
+    ["gh api --method PATCH repos/o/r", "shell:gh:write", 50],
+    ["gh api -f title=bug repos/o/r/issues", "shell:gh:write", 50],
+    ["gh api -F body=@file.md repos/o/r/issues", "shell:gh:write", 50],
+    ["gh api --field title=bug repos/o/r/issues", "shell:gh:write", 50],
+    ["gh api --raw-field body=x repos/o/r/issues", "shell:gh:write", 50],
+  ])("%s → %s / %i (gh api mutation)", (cmd, type, riskScore) => {
     expect(bashCase(cmd)).toEqual({ type, riskScore });
   });
 });
@@ -186,11 +212,28 @@ describe("classifyBash: read queries & misc", () => {
     expect(bashCase(cmd)).toEqual({ type: "shell:read:query", riskScore: 5 });
   });
 
-  it("curl → shell:net:curl", () => {
-    expect(bashCase("curl https://example.com")).toEqual({
+  it.each([
+    "curl https://example.com",
+    "curl -fsSL https://example.com/install.sh",
+    "wget https://example.com/file.tar.gz",
+    "wget -q -O - https://example.com",
+  ])("%s → shell:net:curl", (cmd) => {
+    expect(bashCase(cmd)).toEqual({
       type: "shell:net:curl",
       riskScore: 30,
     });
+  });
+
+  // Redirection disqualifies read-query commands — `echo foo > ~/.bashrc`
+  // and friends write to disk, so must not land in the read bucket.
+  it.each([
+    "echo hello > ~/.bashrc",
+    "echo hello >> ~/.bashrc",
+    "cat secrets > /tmp/out",
+    "ls 2> /tmp/err",
+    "date &> /tmp/log",
+  ])("%s → not shell:read:query (redirect bail-out)", (cmd) => {
+    expect(bashCase(cmd).type).not.toBe("shell:read:query");
   });
 
   it.each([
@@ -256,6 +299,25 @@ describe("classifyMcp", () => {
     "mcp__claude_ai_Notion__notion-fetch",
   ])("%s misclassified as write (known Notion-prefix gap)", (tool) => {
     expect(classifyMcp(tool).type).toBe("mcp:claude_ai_Notion:write");
+  });
+
+  // Negative lookahead `(?![a-z])` prevents mid-word matches like
+  // `listen` / `getaway`. camelCase / snake_case boundaries still resolve
+  // as reads (uppercase or `_` / `-` falls outside `[a-z]`).
+  it.each([
+    ["mcp__fooServer__listen", "mcp:fooServer:write", 40],
+    ["mcp__fooServer__getaway", "mcp:fooServer:write", 40],
+    ["mcp__fooServer__searching", "mcp:fooServer:write", 40],
+  ])("%s → %s (lookahead guards mid-word)", (tool, type, riskScore) => {
+    expect(classifyMcp(tool)).toEqual({ type, riskScore });
+  });
+
+  it.each([
+    ["mcp__fooServer__findAndReplace", "mcp:fooServer:read", 10],
+    ["mcp__fooServer__list_all", "mcp:fooServer:read", 10],
+    ["mcp__fooServer__get-users", "mcp:fooServer:read", 10],
+  ])("%s → %s (lookahead allows word boundary)", (tool, type, riskScore) => {
+    expect(classifyMcp(tool)).toEqual({ type, riskScore });
   });
 
   it("malformed mcp tool name falls back to unknown server / write", () => {

@@ -16,7 +16,9 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { classify } from "./lib/classify.mjs";
+// `classify` is loaded *dynamically* inside main() so any load-time problem
+// with classify.mjs (syntax error, permission issue, missing file) still
+// hits the fail-open path instead of crashing the hook before it can run.
 
 const SHADOW_MODE = process.env["TEGATA_HOOK_ENFORCE"] !== "1";
 const AUDIT_PATH = join(homedir(), ".claude", "tegata-audit.jsonl");
@@ -58,10 +60,24 @@ const main = async () => {
   const sessionId = input.session_id ?? "unknown";
   const cwd = input.cwd ?? process.cwd();
 
+  const here = dirname(fileURLToPath(import.meta.url));
+
+  // Load the classification module dynamically so a broken classify.mjs
+  // falls into fail-open, not a top-level crash.
+  let classify;
+  try {
+    const classifyUrl = pathToFileURL(
+      resolve(here, "lib", "classify.mjs"),
+    ).href;
+    ({ classify } = await import(classifyUrl));
+  } catch {
+    safeExit(0);
+    return;
+  }
+
   // Import Tegata from the built dist — this exercises the real public API
   // that ships on npm. Hook lives at tools/claude-code-hook.mjs, so
   // dist/index.js is one level up.
-  const here = dirname(fileURLToPath(import.meta.url));
   const distEntry = resolve(here, "..", "dist", "index.js");
 
   let Tegata;

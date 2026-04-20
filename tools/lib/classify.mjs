@@ -24,7 +24,10 @@ export const classifyBash = (cmd) => {
   if (/^git\s+push\b/.test(c)) return { type: "shell:git:push", riskScore: 71 };
   if (/^git\s+reset\s+--hard\b/.test(c))
     return { type: "shell:git:reset-hard", riskScore: 85 };
-  if (/^git\s+(branch\s+-D|clean\s+-f)/.test(c))
+  if (
+    /^git\s+branch\s+-D\b/.test(c) ||
+    /^git\s+clean\b(?=.*(?:^|\s)-[a-z]*f[a-z]*)/.test(c)
+  )
     return { type: "shell:git:destructive", riskScore: 75 };
   if (
     /^git\s+(status|log|diff|show|branch(\s|$)|blame|config\s+--get|remote\s+-v|rev-parse)/.test(
@@ -37,23 +40,43 @@ export const classifyBash = (cmd) => {
   )
     return { type: "shell:git:write", riskScore: 40 };
   // Anchored to start to avoid matching `rm -rf` inside a commit message etc.
-  // Matches `rm -r`, `rm -rf`, `rm -fr`, `rm -rfv`, `rm -r -f`, `rm --recursive`.
+  // Handles any number of flag blocks in any order: `rm -rf`, `rm -fr`,
+  // `rm -rfv`, `rm -r -f`, `rm -f -v -r`, `rm --recursive`, `sudo rm -rf`.
   if (
-    /^(?:sudo\s+)?rm\s+(?:-[a-z]*r[a-z]*|--recursive)(?:\s|$)/.test(c) ||
-    /^(?:sudo\s+)?rm\s+-[a-z]+\s+-[a-z]*r/.test(c)
+    /^(?:sudo\s+)?rm\s+(?:-[a-z]+\s+)*(?:-[a-z]*r[a-z]*|--recursive)(?:\s|$)/.test(
+      c,
+    )
   )
     return { type: "shell:fs:delete-recursive", riskScore: 85 };
   if (
     /^(ls|cat|head|tail|pwd|echo|which|whoami|hostname|uname|date|env|wc|file)\b/.test(
       c,
-    )
+    ) &&
+    // Bail out if the command contains shell output redirection — `echo x >
+    // ~/.bashrc` writes to disk, so it's not a read. Covers `>`, `>>`, `&>`,
+    // `2>`, `2>>`. Accepts false positives (`ls | grep >file` etc. fall to
+    // generic) in exchange for never mislabeling a write as a read.
+    !/(?:^|[^0-9])(?:&>|[0-9]*>)/.test(c)
   )
     return { type: "shell:read:query", riskScore: 5 };
   if (/^(npm|pnpm|yarn|npx)\s+(run\s+)?(test|typecheck|lint|build)\b/.test(c))
     return { type: "shell:test:run", riskScore: 10 };
-  if (/^(npm|pnpm|yarn)\s+(publish|install|i\b|add|uninstall|remove)\b/.test(c))
+  if (
+    /^(npm|pnpm|yarn)\s+(publish|install|i\b|ci\b|add|uninstall|remove)\b/.test(
+      c,
+    )
+  )
     return { type: "shell:pkg:mutate", riskScore: 55 };
   if (/^gh\s+(pr\s+create|pr\s+merge|release\s+create)\b/.test(c))
+    return { type: "shell:gh:write", riskScore: 50 };
+  // `gh api` with a mutating method or field flag is a write, not a read.
+  // Must run before the generic `gh api` read rule below.
+  if (
+    /^gh\s+api\b/.test(c) &&
+    /(?:\s(?:-X|--method)\s+(?!GET\b)\w+|\s(?:-f|-F|--field|--raw-field)\b)/i.test(
+      c,
+    )
+  )
     return { type: "shell:gh:write", riskScore: 50 };
   if (
     /^gh\s+(pr\s+view|pr\s+list|pr\s+diff|run\s+view|issue\s+view|api\s+)/.test(
@@ -61,7 +84,8 @@ export const classifyBash = (cmd) => {
     )
   )
     return { type: "shell:gh:read", riskScore: 10 };
-  if (/^curl\b/.test(c)) return { type: "shell:net:curl", riskScore: 30 };
+  if (/^(curl|wget)\b/.test(c))
+    return { type: "shell:net:curl", riskScore: 30 };
   return { type: "shell:exec:generic", riskScore: 30 };
 };
 
@@ -75,7 +99,13 @@ export const classifyMcp = (toolName) => {
   const parts = toolName.split("__");
   const server = parts[1] ?? "unknown";
   const op = parts.slice(2).join("_") || "unknown";
-  const isRead = /(^(read|list|search|fetch|get|ls|find))/i.test(op);
+  // Negative lookahead `(?![a-z])` prevents `list` matching `listen` or
+  // `find` matching `findAndReplace` (camelCase / snake_case boundary is OK
+  // — `_`, `-`, uppercase all fall outside `[a-z]`). No `/i` flag: under
+  // case-insensitive matching `[a-z]` would also match uppercase, which
+  // would reject `getBoard` / `findAndReplace`. MCP ops use lowercase-
+  // initial verbs by convention, so dropping `/i` is safe.
+  const isRead = /^(read|list|search|fetch|get|ls|find)(?![a-z])/.test(op);
   return {
     type: `mcp:${server}:${isRead ? "read" : "write"}`,
     riskScore: isRead ? 10 : 40,
