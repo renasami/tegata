@@ -88,7 +88,7 @@ so Claude sees it.
 | `Write`                   | `write:fs:write`            | 45        |
 | `Bash` `git status`       | `shell:git:read`            | 5         |
 | `Bash` `git commit`       | `shell:git:write`           | 40        |
-| `Bash` `git push`         | `shell:git:push`            | 70        |
+| `Bash` `git push`         | `shell:git:push`            | 71        |
 | `Bash` `git push -f`      | `shell:git:push-force`      | 95        |
 | `Bash` `git reset --hard` | `shell:git:reset-hard`      | 85        |
 | `Bash` `rm -rf`           | `shell:fs:delete-recursive` | 85        |
@@ -100,8 +100,9 @@ so Claude sees it.
 | `mcp__*__write*`          | `mcp:<server>:write`        | 40        |
 
 With the default `escalateAbove: 70`, only `git push`, `git push --force`,
-`git reset --hard`, and `rm -rf` cross the threshold. Override per-action
-types with Tegata policies inside `tools/claude-code-hook.mjs`.
+`git reset --hard`, and `rm -rf` cross the threshold. Note that `escalateAbove`
+uses strict `>` — that's why `git push` is pinned at `71`, not `70`. Override
+per-action types with Tegata policies inside `tools/claude-code-hook.mjs`.
 
 ## Reading the audit log
 
@@ -115,8 +116,11 @@ Each line in `~/.claude/tegata-audit.jsonl` is a JSON object:
   "tool_name": "Bash",
   "action_type": "shell:git:push-force",
   "risk_score": 95,
+  "proposal_id": "prop_01HW...",
   "decision_status": "escalated",
   "decision_tier": "auto",
+  "decision_reason": "riskScore 95 exceeds escalateAbove 70",
+  "decision_ts": "2026-04-19T17:05:36.219Z",
   "mode": "shadow"
 }
 ```

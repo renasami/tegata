@@ -11,10 +11,10 @@
 //
 // Setup: see docs/dogfooding.md
 
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, mkdirSync, writeSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SHADOW_MODE = process.env["TEGATA_HOOK_ENFORCE"] !== "1";
 const AUDIT_PATH = join(homedir(), ".claude", "tegata-audit.jsonl");
@@ -43,7 +43,9 @@ const classifyBash = (cmd) => {
   const c = (cmd ?? "").trim();
   if (/^git\s+push\b.*(--force|-f\b|--force-with-lease)/.test(c))
     return { type: "shell:git:push-force", riskScore: 95 };
-  if (/^git\s+push\b/.test(c)) return { type: "shell:git:push", riskScore: 70 };
+  // 71 (not 70) so the default `escalateAbove: 70` — which uses strict `>` —
+  // actually trips on a plain `git push`. See review feedback on PR #15.
+  if (/^git\s+push\b/.test(c)) return { type: "shell:git:push", riskScore: 71 };
   if (/^git\s+reset\s+--hard\b/.test(c))
     return { type: "shell:git:reset-hard", riskScore: 85 };
   if (/^git\s+(branch\s+-D|clean\s+-f)/.test(c))
@@ -58,7 +60,12 @@ const classifyBash = (cmd) => {
     /^git\s+(commit|add|checkout|merge|rebase|stash|tag|fetch|pull)\b/.test(c)
   )
     return { type: "shell:git:write", riskScore: 40 };
-  if (/\brm\s+-rf?\b/.test(c))
+  // Anchored to start to avoid matching `rm -rf` inside a commit message etc.
+  // Matches `rm -r`, `rm -rf`, `rm -fr`, `rm -rfv`, `rm -r -f`, `rm --recursive`.
+  if (
+    /^(?:sudo\s+)?rm\s+(?:-[a-z]*r[a-z]*|--recursive)(?:\s|$)/.test(c) ||
+    /^(?:sudo\s+)?rm\s+-[a-z]+\s+-[a-z]*r/.test(c)
+  )
     return { type: "shell:fs:delete-recursive", riskScore: 85 };
   if (
     /^(ls|cat|head|tail|pwd|echo|which|whoami|hostname|uname|date|env|wc|file)\b/.test(
@@ -151,7 +158,9 @@ const main = async () => {
 
   let Tegata;
   try {
-    ({ Tegata } = await import(distEntry));
+    // Convert to file:// URL so `import()` works on Windows too —
+    // absolute filesystem paths like `C:\...` are rejected by Node's ESM loader.
+    ({ Tegata } = await import(pathToFileURL(distEntry).href));
   } catch {
     // If dist is missing or broken, skip silently. This is dogfooding —
     // a broken local build should not derail ongoing work.
@@ -184,8 +193,11 @@ const main = async () => {
         tool_name: toolName,
         action_type: type,
         risk_score: riskScore,
+        proposal_id: decision.proposalId,
         decision_status: decision.status,
         decision_tier: decision.tier,
+        decision_reason: decision.reason,
+        decision_ts: decision.timestamp,
         mode: SHADOW_MODE ? "shadow" : "enforce",
       }) + "\n",
     );
@@ -201,11 +213,15 @@ const main = async () => {
 
   // Enforce mode: block if Tegata denied or escalated.
   if (decision.status === "denied" || decision.status === "escalated") {
-    process.stderr.write(
+    // Use writeSync — `process.stderr.write()` can be async when piped on
+    // POSIX, and `process.exit(2)` will truncate the message mid-flight.
+    writeSync(
+      process.stderr.fd,
       `Tegata blocked this tool call.\n` +
         `  tool: ${toolName}\n` +
         `  action: ${type} (riskScore=${riskScore})\n` +
-        `  status: ${decision.status}\n`,
+        `  status: ${decision.status}\n` +
+        `  reason: ${decision.reason ?? "unspecified"}\n`,
     );
     process.exit(2);
     return;
