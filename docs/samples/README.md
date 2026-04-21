@@ -28,14 +28,14 @@ talk material.
 
 Run `node scripts/analyze-audit-log.mjs` to reproduce.
 
-```
+```text
 Total:      121
 Approved:   115 (95.0%)  [auto-pass]
 Escalated:  6   (5.0%)   [human/senior review required]
 Denied:     0
 ```
 
-Escalations (every single one is a genuinely dangerous action):
+Escalations (all are genuinely dangerous actions):
 
 | ActionType                  | riskScore | Count |
 | --------------------------- | --------- | ----- |
@@ -60,10 +60,12 @@ Top action types by volume:
   theoretical — it's `git push --force`, `rm -rf`, and `git push` to a
   shared branch, i.e. the exact actions that cause incidents when they
   go wrong.
-- **Zero false positives / negatives (by inspection).** Every
-  escalation was a real write to a remote or a recursive delete; no
-  benign reads were caught. No genuinely destructive action slipped
-  through.
+- **No obvious false positives / negatives in this sample (manual
+  inspection).** Every escalation was a real write to a remote or a
+  recursive delete; no benign reads were caught. No genuinely
+  destructive action slipped through. This is a qualitative observation
+  on 121 entries, not a precision/recall metric — see Caveats at the
+  bottom for why that lives in the evaluation framework instead.
 - **`git push` alone (not `--force`) is correctly escalated.**
   riskScore 71 exceeds the default `escalateAbove: 70` threshold using
   strict `>`. This is the fix from PR #15 — previously this would have
@@ -101,7 +103,7 @@ issues the project still needs to address:
 
 The only transformation applied is:
 
-```
+```bash
 sed 's|/Users/ren/|/Users/<user>/|g'
 ```
 

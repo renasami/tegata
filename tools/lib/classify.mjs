@@ -64,12 +64,16 @@ export const classifyBash = (cmd) => {
     // `2>`, `2>>`. Accepts false positives (`ls | grep >file` etc. fall to
     // generic) in exchange for never mislabeling a write as a read.
     !/(?:^|[^0-9])(?:&>|[0-9]*>)/.test(c) &&
-    // Also bail out on any shell composition — `&&`, `||`, `;`, `|`, command
-    // substitution (`$(...)`, backticks), or newlines. `cat x && rm y` has a
-    // read prefix but is not safe to classify as a read; fall through to
-    // generic so the riskScore stays at 30 rather than 5.
+    // Also bail out on any shell composition — `&&`, `||`, `;`, `|`, single
+    // background `&`, command / process substitution (`$(...)`, `<(...)`,
+    // backticks), or newlines. `cat x && rm y` has a read prefix but is not
+    // safe to classify as a read; fall through to generic so the riskScore
+    // stays at 30 rather than 5.
     !/(?:&&|\|\||;|\|)/.test(c) &&
-    !/(?:\$\(|`|\n)/.test(c)
+    // Single `&` (background) — but not `&&` or `&>`/`&>>` redirection
+    // which are handled above. `(?:^|[^&])&(?![>&])` matches a bare `&`.
+    !/(?:^|[^&])&(?![>&])/.test(c) &&
+    !/(?:\$\(|<\(|`|\n)/.test(c)
   )
     return { type: "shell:read:query", riskScore: 5 };
   if (/^(npm|pnpm|yarn|npx)\s+(run\s+)?(test|typecheck|lint|build)\b/.test(c))
