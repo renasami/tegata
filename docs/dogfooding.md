@@ -138,6 +138,18 @@ cat ~/.claude/tegata-audit.jsonl \
   | jq 'select(.decision_status=="denied" or .decision_status=="escalated")'
 ```
 
+For a summary table (totals, escalation breakdown, top action types),
+run the bundled analyzer:
+
+```bash
+node scripts/analyze-audit-log.mjs                            # default: docs/samples/shadow-mode-claude-code.jsonl
+node scripts/analyze-audit-log.mjs ~/.claude/tegata-audit.jsonl
+```
+
+A real sample captured from the author's Claude Code sessions is
+committed at [`docs/samples/shadow-mode-claude-code.jsonl`](samples/shadow-mode-claude-code.jsonl)
+with analysis in [`docs/samples/README.md`](samples/README.md).
+
 ## Safety guarantees
 
 - The hook **never** throws into Claude Code. Every error path falls
