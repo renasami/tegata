@@ -103,9 +103,9 @@ contract is:
 ### Audit log writes are mode-independent (MUST)
 
 Every `Decision` is written to the audit log in both modes, with no
-omitted fields. The audit entry SHOULD include the mode it was decided
-under so log readers can disambiguate "this was approved" from "this
-was denied but allowed because shadow mode."
+omitted fields. The audit entry MUST include the mode it was decided
+under so log readers can unambiguously distinguish "this was approved"
+from "this was denied but allowed because shadow mode."
 
 **Why**: The audit log is the system of record. Skipping writes in
 shadow mode would defeat the purpose of running in shadow mode (you
@@ -126,8 +126,13 @@ Each binding chooses how the operator selects mode, but the mapping to
   `mode: "enforce"`; absent means `mode: "shadow"`. (Current behavior;
   ADR-006 documents it as the formal contract rather than an ad hoc
   choice.)
-- **MCP binding (`TegataServer`)**: `mode` passed via constructor
-  options, forwarded to `new Tegata({ mode })`.
+- **MCP binding (`TegataServer`)**: the operator constructs a `Tegata`
+  instance with the desired `mode` and passes it to the
+  `TegataServer(mcp, tegata, config)` constructor. Mode is read off
+  the supplied instance — there is no separate `TegataServer`-level
+  mode option. (Today the wrapper denies all non-`approved` decisions
+  unconditionally; honoring `mode` here is the follow-up implementation
+  work tracked alongside `TegataConfig.mode`.)
 - **Programmatic users**: pass `mode` directly in `new Tegata({ mode })`.
 
 **Why**: Operators interact with bindings, not core. A hook user
@@ -232,8 +237,11 @@ against a synthetic workload).
 - `TegataConfig` gains a field — a minor API surface increase. Mitigated
   by the field being optional with a sensible default (`"enforce"`).
 - Binding authors have a new contract to honor. The Claude Code hook
-  and MCP binding already follow it; future bindings will need to as
-  well, and reviewers must check for it.
+  is the only binding that implements shadow/enforce today; the MCP
+  binding currently denies all non-`approved` decisions unconditionally
+  and will need follow-up work to read `mode` off its `Tegata` instance.
+  Future bindings will need to honor the contract from day one, and
+  reviewers must check for it.
 - The default of `"enforce"` differs from the Claude Code hook's
   default of `"shadow"`. This is intentional — programmatic users
   reaching for `new Tegata()` typically want governance to fire, while
@@ -244,9 +252,12 @@ against a synthetic workload).
 
 - Operators may forget to flip from shadow to enforce after rollout,
   leaving themselves with audit-only "governance" indefinitely.
-  Mitigated by `analyze-audit-log.mjs` surfacing mode in its summary,
-  and by the binding-specific docs (`docs/dogfooding.md`) explicitly
-  calling out the flip step.
+  Mitigated today only by the binding-specific docs
+  (`docs/dogfooding.md`) explicitly calling out the flip step.
+  `scripts/analyze-audit-log.mjs` does not yet surface the `mode`
+  field in its summary — adding a mode-bucketed breakdown is a small
+  follow-up that should ship with the `TegataConfig.mode`
+  implementation PR so the mitigation actually exists in code.
 - A binding that incorrectly ignores mode (e.g. enforces in shadow, or
   fails to enforce in enforce) silently breaks the contract. Mitigated
   by binding-level integration tests that assert mode-honoring
