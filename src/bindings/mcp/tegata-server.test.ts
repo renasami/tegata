@@ -4,7 +4,15 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 import { Tegata } from "../../core/runtime.js";
+import type { TegataConfig } from "../../core/types.js";
 import { TegataServer } from "./tegata-server.js";
+
+/** Test helper — see ADR-009. */
+function newTegata(config?: TegataConfig): Tegata {
+  const r = Tegata.create(config);
+  if (!r.ok) throw new Error(`test setup: ${r.error}`);
+  return r.value;
+}
 
 // ----------------------------------------------------------------
 // Mock McpServer
@@ -68,7 +76,7 @@ async function callTool(
 describe("TegataServer", () => {
   it("approved → original handler executes and returns CallToolResult", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata(); // default: auto-approve
+    const tegata = newTegata(); // default: auto-approve
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     const handler = vi.fn<() => CallToolResult>().mockReturnValue({
@@ -91,7 +99,7 @@ describe("TegataServer", () => {
 
   it("denied (riskScore > threshold) → isError:true, handler not called", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata({ escalateAbove: 50 });
+    const tegata = newTegata({ escalateAbove: 50 });
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     const handler = vi.fn<() => CallToolResult>().mockReturnValue({
@@ -114,7 +122,7 @@ describe("TegataServer", () => {
 
   it("escalated (capability mismatch) → isError:true", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.registerAgent({
       id: "limited-bot",
       name: "Limited Bot",
@@ -146,7 +154,7 @@ describe("TegataServer", () => {
 
   it("timed_out → isError:true", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata({ timeoutMs: 50, defaultOnTimeout: "deny" });
+    const tegata = newTegata({ timeoutMs: 50, defaultOnTimeout: "deny" });
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -180,7 +188,7 @@ describe("TegataServer", () => {
 
   it("params mapping → tool args appear in proposal.params", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     server.tool(
@@ -199,7 +207,7 @@ describe("TegataServer", () => {
 
   it("description fallback → uses MCP description when tegata description omitted", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     server.tool(
@@ -218,7 +226,7 @@ describe("TegataServer", () => {
 
   it("description override → tegata description takes priority", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     server.tool(
@@ -237,7 +245,7 @@ describe("TegataServer", () => {
 
   it("handler error (try/catch) → isError:true, does not crash", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     server.tool(
@@ -258,7 +266,7 @@ describe("TegataServer", () => {
 
   it("connect() → delegates to inner McpServer", async () => {
     const { mock, connectFn } = createMockMcpServer();
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     const transport = {} as Transport;
@@ -269,7 +277,7 @@ describe("TegataServer", () => {
 
   it("multiple tools → each operates independently", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata({ escalateAbove: 50 });
+    const tegata = newTegata({ escalateAbove: 50 });
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     const readHandler = vi.fn<() => CallToolResult>().mockReturnValue({
@@ -303,7 +311,7 @@ describe("TegataServer", () => {
 
   it("denied response contains proposalId for audit correlation", async () => {
     const { mock, tools } = createMockMcpServer();
-    const tegata = new Tegata({ escalateAbove: 50 });
+    const tegata = newTegata({ escalateAbove: 50 });
     const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
 
     server.tool(

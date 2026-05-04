@@ -8,6 +8,17 @@ import type {
 } from "./types.js";
 import { Tegata } from "./runtime.js";
 
+/**
+ * Test helper: construct a Tegata from a known-valid config.
+ * Throws on validation failure so callers don't need to thread
+ * `Result` through every test setup. See ADR-009.
+ */
+function newTegata(config?: TegataConfig): Tegata {
+  const r = Tegata.create(config);
+  if (!r.ok) throw new Error(`test setup: ${r.error}`);
+  return r.value;
+}
+
 // ----------------------------------------------------------------
 // Test helpers
 // ----------------------------------------------------------------
@@ -48,7 +59,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("zero-config propose auto-approves a low-risk action", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -62,7 +73,7 @@ describe("Tegata runtime", () => {
   });
 
   it("escalates when riskScore exceeds the default threshold", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -77,7 +88,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("denies empty proposer in propose()", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const decision = await tegata.propose({
       proposer: "",
@@ -90,7 +101,7 @@ describe("Tegata runtime", () => {
   });
 
   it("denies empty action type in propose()", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -103,7 +114,7 @@ describe("Tegata runtime", () => {
   });
 
   it("records audit event for empty proposer denial", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const decision = await tegata.propose({
       proposer: "",
@@ -118,7 +129,7 @@ describe("Tegata runtime", () => {
   });
 
   it("records audit event for empty action type denial", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -137,7 +148,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("skips threshold comparison when riskScore is omitted", async () => {
-    const tegata = new Tegata({ escalateAbove: 0 });
+    const tegata = newTegata({ escalateAbove: 0 });
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -149,7 +160,7 @@ describe("Tegata runtime", () => {
   });
 
   it("escalates when riskScore is 1 and escalateAbove is 0", async () => {
-    const tegata = new Tegata({ escalateAbove: 0 });
+    const tegata = newTegata({ escalateAbove: 0 });
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -160,7 +171,7 @@ describe("Tegata runtime", () => {
   });
 
   it("does not escalate when riskScore is explicitly 0", async () => {
-    const tegata = new Tegata({ escalateAbove: 70 });
+    const tegata = newTegata({ escalateAbove: 70 });
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -175,7 +186,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("does NOT escalate when riskScore equals escalateAbove", async () => {
-    const tegata = new Tegata({ escalateAbove: 70 });
+    const tegata = newTegata({ escalateAbove: 70 });
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -186,7 +197,7 @@ describe("Tegata runtime", () => {
   });
 
   it("escalates when riskScore is escalateAbove + 1", async () => {
-    const tegata = new Tegata({ escalateAbove: 70 });
+    const tegata = newTegata({ escalateAbove: 70 });
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -201,7 +212,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("notify tier returns approved with tier=notify", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({ match: "slack:channel:post", tier: "notify" });
 
     const decision = await tegata.propose({
@@ -214,7 +225,7 @@ describe("Tegata runtime", () => {
   });
 
   it("auto and notify both return approved but differ in tier", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({ match: "slack:channel:post", tier: "notify" });
 
     const autoDecision = await tegata.propose({
@@ -237,7 +248,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("records proposed + decided events for each proposal", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     await tegata.propose({
       proposer: "bot",
@@ -252,7 +263,7 @@ describe("Tegata runtime", () => {
   });
 
   it("records proposed + pending + decided events for review tier", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -272,7 +283,7 @@ describe("Tegata runtime", () => {
   });
 
   it("records escalated event type when escalated", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     await tegata.propose({
       proposer: "bot",
@@ -286,7 +297,7 @@ describe("Tegata runtime", () => {
   });
 
   it("filters audit log by actionType", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
     await tegata.propose({ proposer: "bot", action: { type: "a:b:write" } });
@@ -297,7 +308,7 @@ describe("Tegata runtime", () => {
   });
 
   it("filters audit log by proposalId", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     const d1 = await tegata.propose({
       proposer: "bot",
@@ -314,7 +325,7 @@ describe("Tegata runtime", () => {
   });
 
   it("handles negative limit gracefully", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
 
     const log = tegata.getAuditLog({ limit: -1 });
@@ -324,7 +335,7 @@ describe("Tegata runtime", () => {
   it("preserves defaults when config has explicit undefined", async () => {
     // Simulate a JS caller bypassing strict types
     const config: unknown = JSON.parse('{"escalateAbove": null}');
-    const tegata = new Tegata(config as TegataConfig);
+    const tegata = newTegata(config as TegataConfig);
 
     const decision = await tegata.propose({
       proposer: "bot",
@@ -340,7 +351,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("rejects duplicate agent registration", () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const agent = {
       id: "deploy-bot",
       name: "Deploy Bot",
@@ -357,7 +368,7 @@ describe("Tegata runtime", () => {
   });
 
   it("clones agent on registration so external mutation has no effect", () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const agent = {
       id: "deploy-bot",
       name: "Deploy Bot",
@@ -383,7 +394,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("clones policy rules so external mutation has no effect", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     const rule: PolicyRule = {
       match: "db:users:write",
       tier: "review",
@@ -403,7 +414,7 @@ describe("Tegata runtime", () => {
   });
 
   it("does not leak internal reviewers array via decision", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -429,7 +440,7 @@ describe("Tegata runtime", () => {
   });
 
   it("returns empty results for invalid since string", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
 
     const log = tegata.getAuditLog({ since: "not-a-date" });
@@ -441,7 +452,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("registered agent with matching capability proceeds normally", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.registerAgent({
       id: "ci-bot",
       name: "CI Bot",
@@ -460,7 +471,7 @@ describe("Tegata runtime", () => {
   });
 
   it("registered agent without matching capability is escalated", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.registerAgent({
       id: "ci-bot",
       name: "CI Bot",
@@ -479,7 +490,7 @@ describe("Tegata runtime", () => {
   });
 
   it("registered agent with riskScore exceeding maxApprovableRisk is escalated", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.registerAgent({
       id: "ci-bot",
       name: "CI Bot",
@@ -498,7 +509,7 @@ describe("Tegata runtime", () => {
   });
 
   it("unregistered proposer skips capability check (zero-config)", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     // No agent registered — "unknown-bot" is not in the agent registry
 
     const decision = await tegata.propose({
@@ -512,7 +523,7 @@ describe("Tegata runtime", () => {
   });
 
   it("registered agent with wildcard capability matches everything", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.registerAgent({
       id: "admin-bot",
       name: "Admin Bot",
@@ -531,7 +542,7 @@ describe("Tegata runtime", () => {
   });
 
   it("registered agent still respects global escalateAbove after agent checks pass", async () => {
-    const tegata = new Tegata({ escalateAbove: 70 });
+    const tegata = newTegata({ escalateAbove: 70 });
     tegata.registerAgent({
       id: "ci-bot",
       name: "CI Bot",
@@ -556,7 +567,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("review handler approved → Decision.status=approved with decidedBy", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -574,7 +585,7 @@ describe("Tegata runtime", () => {
   });
 
   it("review handler denied → Decision.status=denied", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -598,7 +609,7 @@ describe("Tegata runtime", () => {
       reason: "looks good",
     });
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "finance:*:transfer",
       tier: "approve",
@@ -617,7 +628,7 @@ describe("Tegata runtime", () => {
   });
 
   it("handler timeout + defaultOnTimeout=deny → timed_out", async () => {
-    const tegata = new Tegata({
+    const tegata = newTegata({
       timeoutMs: 50,
       defaultOnTimeout: "deny",
     });
@@ -637,7 +648,7 @@ describe("Tegata runtime", () => {
   });
 
   it("handler timeout + defaultOnTimeout=escalate → escalated", async () => {
-    const tegata = new Tegata({
+    const tegata = newTegata({
       timeoutMs: 50,
       defaultOnTimeout: "escalate",
     });
@@ -657,7 +668,7 @@ describe("Tegata runtime", () => {
   });
 
   it("policy-level timeoutMs overrides config", async () => {
-    const tegata = new Tegata({
+    const tegata = newTegata({
       timeoutMs: 10_000, // config: long timeout
       defaultOnTimeout: "deny",
     });
@@ -683,7 +694,7 @@ describe("Tegata runtime", () => {
       return { status: "approved", decidedBy: "test-reviewer" };
     };
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -701,7 +712,7 @@ describe("Tegata runtime", () => {
   });
 
   it("handler error → denied with error reason", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -723,7 +734,7 @@ describe("Tegata runtime", () => {
       decidedBy: "auto-reviewer",
     });
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -739,7 +750,7 @@ describe("Tegata runtime", () => {
   });
 
   it("auto/notify tier → decidedBy is undefined", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({ match: "slack:*:post", tier: "notify" });
 
     const autoDecision = await tegata.propose({
@@ -760,7 +771,7 @@ describe("Tegata runtime", () => {
   // ----------------------------------------------------------------
 
   it("handler that throws synchronously → denied (not unhandled rejection)", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -784,7 +795,7 @@ describe("Tegata runtime", () => {
       return { status: "approved", decidedBy: "reviewer" };
     };
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -808,7 +819,7 @@ describe("Tegata runtime", () => {
       // Simulate JS caller returning invalid shape
       ({ status: "escalated", decidedBy: "reviewer" }) as never;
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -830,7 +841,7 @@ describe("Tegata runtime", () => {
       decidedBy: "",
     });
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -850,7 +861,7 @@ describe("Tegata runtime", () => {
     const leakyHandler: ReviewHandler = () =>
       Promise.reject(new Error("secret-api-key-12345: auth failed"));
 
-    const tegata = new Tegata();
+    const tegata = newTegata();
     tegata.addPolicy({
       match: "db:users:write",
       tier: "review",
@@ -865,5 +876,122 @@ describe("Tegata runtime", () => {
     expect(decision.status).toBe("denied");
     expect(decision.reason).toBe("handler error");
     expect(decision.reason).not.toContain("secret");
+  });
+});
+
+// ----------------------------------------------------------------
+// Tegata.create() — config validation (ADR-009)
+// ----------------------------------------------------------------
+
+describe("Tegata.create config validation", () => {
+  it("returns Ok for zero-config", () => {
+    const result = Tegata.create();
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns Ok for fully-specified valid config", () => {
+    const result = Tegata.create({
+      defaultTier: "review",
+      escalateAbove: 50,
+      timeoutMs: 5_000,
+      defaultOnTimeout: "escalate",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("treats explicit null as use-default (preserves nullish coalescing)", () => {
+    const config = JSON.parse(
+      '{"escalateAbove": null, "timeoutMs": null}',
+    ) as TegataConfig;
+    const result = Tegata.create(config);
+    expect(result.ok).toBe(true);
+  });
+
+  // escalateAbove boundaries
+
+  it("accepts escalateAbove = 0 (boundary)", () => {
+    const result = Tegata.create({ escalateAbove: 0 });
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts escalateAbove = 100 (boundary)", () => {
+    const result = Tegata.create({ escalateAbove: 100 });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects escalateAbove = -1", () => {
+    const result = Tegata.create({ escalateAbove: -1 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("escalateAbove");
+    }
+  });
+
+  it("rejects escalateAbove = 101", () => {
+    const result = Tegata.create({ escalateAbove: 101 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("escalateAbove");
+    }
+  });
+
+  it("rejects escalateAbove = NaN", () => {
+    const result = Tegata.create({ escalateAbove: Number.NaN });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects escalateAbove = Infinity", () => {
+    const result = Tegata.create({ escalateAbove: Number.POSITIVE_INFINITY });
+    expect(result.ok).toBe(false);
+  });
+
+  // timeoutMs boundaries
+
+  it("accepts timeoutMs = 1 (smallest positive)", () => {
+    const result = Tegata.create({ timeoutMs: 1 });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects timeoutMs = 0 (must be strictly positive)", () => {
+    const result = Tegata.create({ timeoutMs: 0 });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("timeoutMs");
+    }
+  });
+
+  it("rejects timeoutMs = -100", () => {
+    const result = Tegata.create({ timeoutMs: -100 });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects timeoutMs = NaN", () => {
+    const result = Tegata.create({ timeoutMs: Number.NaN });
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects timeoutMs = Infinity", () => {
+    const result = Tegata.create({ timeoutMs: Number.POSITIVE_INFINITY });
+    expect(result.ok).toBe(false);
+  });
+
+  // String enum guards (JS callers)
+
+  it("rejects unknown defaultTier (JS caller)", () => {
+    const config = { defaultTier: "bogus" } as unknown as TegataConfig;
+    const result = Tegata.create(config);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("defaultTier");
+    }
+  });
+
+  it("rejects unknown defaultOnTimeout (JS caller)", () => {
+    const config = { defaultOnTimeout: "bogus" } as unknown as TegataConfig;
+    const result = Tegata.create(config);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("defaultOnTimeout");
+    }
   });
 });

@@ -131,12 +131,16 @@ type ServerBundle = {
  * @returns The configured TegataServer, or an error Result.
  */
 function setup(): Result<ServerBundle> {
-  const tegata = new Tegata({
+  const tegataResult = Tegata.create({
     defaultTier: "auto",
     escalateAbove: 70,
     timeoutMs: 30_000,
     defaultOnTimeout: "deny",
   });
+  if (!tegataResult.ok) {
+    return { ok: false, error: `Tegata.create: ${tegataResult.error}` };
+  }
+  const tegata = tegataResult.value;
 
   // `deploy-bot` can read everything in CI, operate freely on staging,
   // and delete logs. Production capability is intentionally withheld.

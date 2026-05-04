@@ -18,7 +18,9 @@ await mcpClient.callTool("db:users:delete", { userId: "all" });
 // ✅ After: Tegata intercepts and enforces approval
 import { Tegata } from "tegata";
 
-const tegata = new Tegata();
+const created = Tegata.create();
+if (!created.ok) throw new Error(created.error);
+const tegata = created.value;
 
 const result = await tegata.propose({
   proposer: "cleanup-bot",
@@ -50,12 +52,17 @@ Tegata sits on top of MCP and A2A. It doesn't replace them — it adds the missi
 ```typescript
 import { Tegata } from "tegata";
 
-const tegata = new Tegata({
+// Tegata is constructed through a validating static factory
+// (see ADR-009). Out-of-range config returns Err instead of
+// silently corrupting runtime state.
+const created = Tegata.create({
   defaultTier: "review", // Default approval level
-  escalateAbove: 70, // Auto-escalate when riskScore > 70
-  timeoutMs: 30_000, // 30s timeout for reviewer response
+  escalateAbove: 70, // Auto-escalate when riskScore > 70 (must be in [0, 100])
+  timeoutMs: 30_000, // 30s timeout for reviewer response (must be > 0)
   defaultOnTimeout: "deny", // Deny if no response
 });
+if (!created.ok) throw new Error(created.error);
+const tegata = created.value;
 
 // Register an agent
 tegata.registerAgent({
