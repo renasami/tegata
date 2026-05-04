@@ -994,4 +994,34 @@ describe("Tegata.create config validation", () => {
       expect(result.error).toContain("defaultOnTimeout");
     }
   });
+
+  // Defense-in-depth: TypeScript's `private` modifier is compile-time only.
+  // A JS caller (or a TS caller using `as any`) can still reach `new
+  // Tegata(...)`. The constructor must re-validate so `this.config` is
+  // never left undefined / corrupt. See ADR-009 + Codex P1 review on PR #19.
+
+  it("survives JS-bypass `new Tegata()` (no config)", async () => {
+    // Cast through `unknown` to bypass the TS `private` modifier the way
+    // a JS caller would at runtime.
+    const Ctor = Tegata as unknown as new (config?: TegataConfig) => Tegata;
+    const tegata = new Ctor();
+    const decision = await tegata.propose({
+      proposer: "tester",
+      action: { type: "demo:read", riskScore: 5 },
+    });
+    expect(decision.status).toBe("approved");
+  });
+
+  it("survives JS-bypass `new Tegata(garbage)` by falling back to defaults", async () => {
+    // Garbage that would fail validation in `Tegata.create()`. The
+    // constructor must NOT crash — it falls back to defaults.
+    const Ctor = Tegata as unknown as new (config?: TegataConfig) => Tegata;
+    const garbage = { escalateAbove: 999 } as TegataConfig;
+    const tegata = new Ctor(garbage);
+    const decision = await tegata.propose({
+      proposer: "tester",
+      action: { type: "demo:read", riskScore: 5 },
+    });
+    expect(decision.status).toBe("approved");
+  });
 });

@@ -38,14 +38,23 @@ Adopt **Option 4**: a static factory.
 
 ```typescript
 export class Tegata {
-  private constructor(config: Required<TegataConfig>) {
-    this.config = config;
+  private constructor(config?: TegataConfig) {
+    // Defense-in-depth: `private` is TS-only. A JS caller (or a TS
+    // caller using type assertions) can still reach `new Tegata(...)`,
+    // so we re-validate here. On validation failure we fall back to
+    // defaults rather than throw — `functional/no-throw-statements`
+    // is enforced in `src/**`, and crashing the runtime is worse than
+    // running with documented defaults. The Result-returning
+    // `Tegata.create()` remains the documented entry point for
+    // surfacing validation errors to type-safe callers.
+    const validated = validateConfig(config);
+    this.config = validated.ok ? validated.value : { ...DEFAULT_CONFIG };
   }
 
   static create(config?: TegataConfig): Result<Tegata> {
     const validated = validateConfig(config);
     if (!validated.ok) return validated;
-    return { ok: true, value: new Tegata(validated.value) };
+    return { ok: true, value: new Tegata(config) };
   }
 }
 ```

@@ -153,10 +153,25 @@ export class Tegata {
    * Construction must go through `create()` so that config validation
    * cannot be skipped. See ADR-009 for rationale.
    *
-   * @param config - A fully-validated, defaults-applied config.
+   * **Defense-in-depth**: `private` is a TypeScript-only restriction.
+   * JS callers (and TS callers using type assertions) can still invoke
+   * `new Tegata(...)` at runtime. We re-run `validateConfig` here so
+   * `this.config` is always a usable `Required<TegataConfig>` — without
+   * this guard, a JS bypass would set `this.config` to whatever was
+   * passed in, and the first `propose()` call would crash on
+   * `this.config.defaultTier`.
+   *
+   * The Result-returning {@link Tegata.create} remains the documented
+   * entry point for surfacing validation errors. If a JS bypass passes
+   * garbage that fails validation, this branch silently falls back to
+   * defaults so the runtime stays usable. (Throwing is forbidden by
+   * `functional/no-throw-statements` in `src/**`.)
+   *
+   * @param config - Optional config. Re-validated regardless of caller.
    */
-  private constructor(config: Required<TegataConfig>) {
-    this.config = config;
+  private constructor(config?: TegataConfig) {
+    const validated = validateConfig(config);
+    this.config = validated.ok ? validated.value : { ...DEFAULT_CONFIG };
   }
 
   /**
@@ -186,7 +201,7 @@ export class Tegata {
     if (!validated.ok) {
       return validated;
     }
-    return { ok: true, value: new Tegata(validated.value) };
+    return { ok: true, value: new Tegata(config) };
   }
 
   /**
