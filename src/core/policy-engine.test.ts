@@ -5,6 +5,13 @@ import { globMatch, matchesCapability } from "./glob.js";
 import { resolvePolicy } from "./policy-engine.js";
 import { Tegata } from "./runtime.js";
 
+/** Test helper — see ADR-009 for why construction goes through `create()`. */
+function newTegata(): Tegata {
+  const r = Tegata.create();
+  if (!r.ok) throw new Error(`test setup: ${r.error}`);
+  return r.value;
+}
+
 const noopHandler: ReviewHandler = async () => ({
   status: "approved",
   decidedBy: "test-reviewer",
@@ -244,7 +251,7 @@ describe("resolvePolicy", () => {
 
 describe("audit glob filter", () => {
   it("filters audit log events with glob actionType", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     await tegata.propose({
       proposer: "bot",
@@ -268,7 +275,7 @@ describe("audit glob filter", () => {
   });
 
   it("still supports exact actionType filter", async () => {
-    const tegata = new Tegata();
+    const tegata = newTegata();
 
     await tegata.propose({
       proposer: "bot",

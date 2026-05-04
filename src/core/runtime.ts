@@ -14,6 +14,7 @@ import { matchesCapability } from "./glob.js";
 import { resolvePolicy } from "./policy-engine.js";
 import type {
   AgentRegistration,
+  ApprovalTier,
   AuditEvent,
   AuditEventType,
   AuditQuery,
@@ -24,6 +25,7 @@ import type {
   Result,
   ReviewResult,
   TegataConfig,
+  TimeoutBehavior,
 } from "./types.js";
 
 const DEFAULT_CONFIG: Required<TegataConfig> = {
@@ -32,6 +34,83 @@ const DEFAULT_CONFIG: Required<TegataConfig> = {
   timeoutMs: 30_000,
   defaultOnTimeout: "deny",
 };
+
+const VALID_TIERS: readonly ApprovalTier[] = [
+  "auto",
+  "notify",
+  "review",
+  "approve",
+];
+
+const VALID_TIMEOUT_BEHAVIORS: readonly TimeoutBehavior[] = [
+  "deny",
+  "escalate",
+];
+
+/**
+ * Validate a `TegataConfig` and apply defaults.
+ *
+ * Explicit `null` / `undefined` for any field is treated as "use default"
+ * (preserves backwards-compatible nullish coalescing semantics). All other
+ * values must satisfy the documented contract:
+ *
+ * - `escalateAbove`: finite number in `[0, 100]`
+ * - `timeoutMs`: finite number > 0
+ * - `defaultTier`: one of the four `ApprovalTier` strings
+ * - `defaultOnTimeout`: one of the two `TimeoutBehavior` strings
+ *
+ * The tier / behavior string checks are primarily for JS callers — the
+ * TypeScript type already constrains them at compile time.
+ *
+ * @param config - The config to validate (optional).
+ * @returns `Ok` with a fully-populated config; `Err` describing the first
+ *   field that failed validation.
+ */
+function validateConfig(
+  config: TegataConfig | undefined,
+): Result<Required<TegataConfig>> {
+  const merged: Required<TegataConfig> = {
+    defaultTier: config?.defaultTier ?? DEFAULT_CONFIG.defaultTier,
+    escalateAbove: config?.escalateAbove ?? DEFAULT_CONFIG.escalateAbove,
+    timeoutMs: config?.timeoutMs ?? DEFAULT_CONFIG.timeoutMs,
+    defaultOnTimeout:
+      config?.defaultOnTimeout ?? DEFAULT_CONFIG.defaultOnTimeout,
+  };
+
+  if (!VALID_TIERS.includes(merged.defaultTier)) {
+    return {
+      ok: false,
+      error: `defaultTier must be one of ${VALID_TIERS.join(", ")} (got ${JSON.stringify(merged.defaultTier)})`,
+    };
+  }
+
+  if (
+    !Number.isFinite(merged.escalateAbove) ||
+    merged.escalateAbove < 0 ||
+    merged.escalateAbove > 100
+  ) {
+    return {
+      ok: false,
+      error: `escalateAbove must be a finite number in [0, 100] (got ${String(merged.escalateAbove)})`,
+    };
+  }
+
+  if (!Number.isFinite(merged.timeoutMs) || merged.timeoutMs <= 0) {
+    return {
+      ok: false,
+      error: `timeoutMs must be a finite number > 0 (got ${String(merged.timeoutMs)})`,
+    };
+  }
+
+  if (!VALID_TIMEOUT_BEHAVIORS.includes(merged.defaultOnTimeout)) {
+    return {
+      ok: false,
+      error: `defaultOnTimeout must be one of ${VALID_TIMEOUT_BEHAVIORS.join(", ")} (got ${JSON.stringify(merged.defaultOnTimeout)})`,
+    };
+  }
+
+  return { ok: true, value: merged };
+}
 
 /**
  * Clone a PolicyRule without breaking function references.
@@ -69,19 +148,60 @@ export class Tegata {
   private readonly audit = new AuditStore();
 
   /**
-   * Construct a new Tegata runtime.
+   * Internal constructor. Use {@link Tegata.create} instead.
    *
-   * @param config - Optional configuration. All fields have sensible
-   *   defaults — `new Tegata()` with zero config is supported.
+   * Construction must go through `create()` so that config validation
+   * cannot be skipped. See ADR-009 for rationale.
+   *
+   * **Defense-in-depth**: `private` is a TypeScript-only restriction.
+   * JS callers (and TS callers using type assertions) can still invoke
+   * `new Tegata(...)` at runtime. We re-run `validateConfig` here so
+   * `this.config` is always a usable `Required<TegataConfig>` — without
+   * this guard, a JS bypass would set `this.config` to whatever was
+   * passed in, and the first `propose()` call would crash on
+   * `this.config.defaultTier`.
+   *
+   * The Result-returning {@link Tegata.create} remains the documented
+   * entry point for surfacing validation errors. If a JS bypass passes
+   * garbage that fails validation, this branch silently falls back to
+   * defaults so the runtime stays usable. (Throwing is forbidden by
+   * `functional/no-throw-statements` in `src/**`.)
+   *
+   * @param config - Optional config. Re-validated regardless of caller.
    */
-  constructor(config?: TegataConfig) {
-    this.config = {
-      defaultTier: config?.defaultTier ?? DEFAULT_CONFIG.defaultTier,
-      escalateAbove: config?.escalateAbove ?? DEFAULT_CONFIG.escalateAbove,
-      timeoutMs: config?.timeoutMs ?? DEFAULT_CONFIG.timeoutMs,
-      defaultOnTimeout:
-        config?.defaultOnTimeout ?? DEFAULT_CONFIG.defaultOnTimeout,
-    };
+  private constructor(config?: TegataConfig) {
+    const validated = validateConfig(config);
+    this.config = validated.ok ? validated.value : { ...DEFAULT_CONFIG };
+  }
+
+  /**
+   * Construct a new Tegata runtime with a validated config.
+   *
+   * All fields of `TegataConfig` are optional — `Tegata.create()` with
+   * zero config is supported and uses the documented defaults
+   * (`escalateAbove: 70`, `timeoutMs: 30_000`, `defaultTier: "auto"`,
+   * `defaultOnTimeout: "deny"`).
+   *
+   * Validation rules (see ADR-009):
+   *
+   * - `escalateAbove`: finite number in `[0, 100]`
+   * - `timeoutMs`: finite number > 0
+   * - `defaultTier`: one of `"auto" | "notify" | "review" | "approve"`
+   * - `defaultOnTimeout`: one of `"deny" | "escalate"`
+   *
+   * Out-of-range or non-finite values return `Err`. Explicit `null` /
+   * `undefined` is treated as "use the default" for that field.
+   *
+   * @param config - Optional configuration overrides.
+   * @returns `Ok<Tegata>` on success; `Err` describing the first
+   *   invalid field.
+   */
+  static create(config?: TegataConfig): Result<Tegata> {
+    const validated = validateConfig(config);
+    if (!validated.ok) {
+      return validated;
+    }
+    return { ok: true, value: new Tegata(config) };
   }
 
   /**

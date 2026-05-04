@@ -92,10 +92,19 @@ const main = async () => {
     return;
   }
 
-  const tegata = new Tegata({
+  // ADR-009: Tegata construction goes through the validating factory.
+  // Bad config here would mean the hook is misconfigured — fail open
+  // (skip enforcement, just like a missing dist) rather than wedge
+  // every Claude Code tool call.
+  const tegataResult = Tegata.create({
     defaultTier: "auto",
     escalateAbove: 70,
   });
+  if (!tegataResult.ok) {
+    safeExit(0);
+    return;
+  }
+  const tegata = tegataResult.value;
 
   const { type, riskScore } = classify(toolName, toolInput);
 
