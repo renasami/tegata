@@ -48,15 +48,15 @@ replace, or extend transport-layer authentication or authorization.**
 
 Concretely:
 
-| Concern                                            | Owner              | Tegata's role                                     |
-| -------------------------------------------------- | ------------------ | ------------------------------------------------- |
-| Is the caller who they say they are?               | MCP / A2A / OAuth  | None — assume authn already happened              |
-| Can this caller invoke this endpoint?              | MCP / A2A / OAuth  | None — assume coarse authz already happened       |
-| Should this _specific action_ require approval?    | **Tegata**         | `PolicyRule` + `riskScore` + `escalateAbove`      |
-| Who approves it, and under what consensus?         | **Tegata**         | `tier`, `reviewers`, `consensus`                  |
-| What's the record of who approved what?            | **Tegata**         | `AuditEvent` event-sourcing log (ADR-003)         |
-| What happens on timeout?                           | **Tegata**         | `defaultOnTimeout`, escalation status             |
-| When is the binding allowed to actually block?     | **Tegata** binding | `mode: shadow \| enforce` (ADR-006)               |
+| Concern                                         | Owner              | Tegata's role                                |
+| ----------------------------------------------- | ------------------ | -------------------------------------------- |
+| Is the caller who they say they are?            | MCP / A2A / OAuth  | None — assume authn already happened         |
+| Can this caller invoke this endpoint?           | MCP / A2A / OAuth  | None — assume coarse authz already happened  |
+| Should this _specific action_ require approval? | **Tegata**         | `PolicyRule` + `riskScore` + `escalateAbove` |
+| Who approves it, and under what consensus?      | **Tegata**         | `tier`, `reviewers`, `consensus`             |
+| What's the record of who approved what?         | **Tegata**         | `AuditEvent` event-sourcing log (ADR-003)    |
+| What happens on timeout?                        | **Tegata**         | `defaultOnTimeout`, escalation status        |
+| When is the binding allowed to actually block?  | **Tegata** binding | `mode: shadow \| enforce` (ADR-006)          |
 
 Tegata's bindings (`TegataServer` for MCP, future A2A binding) sit
 _inside_ the authenticated request — after the transport layer has
