@@ -309,6 +309,58 @@ describe("TegataServer", () => {
     expect(writeResult.isError).toBe(true);
   });
 
+  it("shadow mode → denied/escalated actions still execute handler", async () => {
+    const { mock, tools } = createMockMcpServer();
+    const tegata = newTegata({ escalateAbove: 50, mode: "shadow" });
+    const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
+
+    const handler = vi.fn<() => CallToolResult>().mockReturnValue({
+      content: [{ type: "text", text: "executed" }],
+    });
+
+    server.tool(
+      "risky-op",
+      { description: "Risky" },
+      { actionType: "db:data:delete", riskScore: 80 },
+      handler,
+    );
+
+    const result = await callTool(tools, "risky-op");
+
+    // In shadow mode, handler runs even though Tegata would deny
+    expect(handler).toHaveBeenCalledOnce();
+    expect(result.isError).not.toBe(true);
+    expect(result.content[0]).toEqual({ type: "text", text: "executed" });
+
+    // But audit log still records the escalation
+    const log = tegata.getAuditLog();
+    const escalated = log.find((e) => e.eventType === "escalated");
+    expect(escalated).toBeDefined();
+    expect(escalated?.mode).toBe("shadow");
+  });
+
+  it("enforce mode → denied/escalated actions blocked (existing behavior)", async () => {
+    const { mock, tools } = createMockMcpServer();
+    const tegata = newTegata({ escalateAbove: 50, mode: "enforce" });
+    const server = new TegataServer(mock, tegata, { proposer: "test-bot" });
+
+    const handler = vi.fn<() => CallToolResult>().mockReturnValue({
+      content: [{ type: "text", text: "should not run" }],
+    });
+
+    server.tool(
+      "risky-op",
+      { description: "Risky" },
+      { actionType: "db:data:delete", riskScore: 80 },
+      handler,
+    );
+
+    const result = await callTool(tools, "risky-op");
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.isError).toBe(true);
+  });
+
   it("denied response contains proposalId for audit correlation", async () => {
     const { mock, tools } = createMockMcpServer();
     const tegata = newTegata({ escalateAbove: 50 });

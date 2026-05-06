@@ -439,6 +439,59 @@ describe("Tegata runtime", () => {
     expect(decision2.reviewers).toEqual(["alice"]);
   });
 
+  // ----------------------------------------------------------------
+  // Execution mode (ADR-006)
+  // ----------------------------------------------------------------
+
+  it("audit events carry mode from config", async () => {
+    const tegata = newTegata({ mode: "shadow" });
+
+    await tegata.propose({
+      proposer: "bot",
+      action: { type: "x:y:read" },
+    });
+
+    const log = tegata.getAuditLog();
+    expect(log.length).toBeGreaterThan(0);
+    for (const event of log) {
+      expect(event.mode).toBe("shadow");
+    }
+  });
+
+  it("mode defaults to enforce in audit events", async () => {
+    const tegata = newTegata();
+
+    await tegata.propose({
+      proposer: "bot",
+      action: { type: "x:y:read" },
+    });
+
+    const log = tegata.getAuditLog();
+    for (const event of log) {
+      expect(event.mode).toBe("enforce");
+    }
+  });
+
+  it("shadow mode does not alter decision.status", async () => {
+    const tegata = newTegata({ mode: "shadow" });
+
+    const decision = await tegata.propose({
+      proposer: "bot",
+      action: { type: "ci:production:deploy", riskScore: 85 },
+    });
+
+    // Core returns escalated regardless of mode
+    expect(decision.status).toBe("escalated");
+  });
+
+  it("mode getter returns configured mode", () => {
+    const shadow = newTegata({ mode: "shadow" });
+    const enforce = newTegata({ mode: "enforce" });
+
+    expect(shadow.mode).toBe("shadow");
+    expect(enforce.mode).toBe("enforce");
+  });
+
   it("returns empty results for invalid since string", async () => {
     const tegata = newTegata();
     await tegata.propose({ proposer: "bot", action: { type: "x:y:read" } });
@@ -992,6 +1045,35 @@ describe("Tegata.create config validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("defaultOnTimeout");
+    }
+  });
+
+  // mode validation (ADR-006)
+
+  it("accepts mode = 'shadow'", () => {
+    const result = Tegata.create({ mode: "shadow" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("accepts mode = 'enforce'", () => {
+    const result = Tegata.create({ mode: "enforce" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("defaults mode to 'enforce' when omitted", () => {
+    const result = Tegata.create();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.mode).toBe("enforce");
+    }
+  });
+
+  it("rejects unknown mode (JS caller)", () => {
+    const config = { mode: "dry-run" } as unknown as TegataConfig;
+    const result = Tegata.create(config);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("mode");
     }
   });
 

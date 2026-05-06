@@ -151,7 +151,7 @@ export class TegataServer {
       };
 
       return tegata.propose(proposal).then((decision) => {
-        if (decision.status !== "approved") {
+        if (decision.status !== "approved" && tegata.mode === "enforce") {
           return deniedResult(
             decision.reason ?? decision.status,
             decision.proposalId,

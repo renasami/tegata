@@ -20,6 +20,7 @@ import type {
   AuditQuery,
   Decision,
   DecisionStatus,
+  ExecutionMode,
   PolicyRule,
   Proposal,
   Result,
@@ -33,6 +34,7 @@ const DEFAULT_CONFIG: Required<TegataConfig> = {
   escalateAbove: 70,
   timeoutMs: 30_000,
   defaultOnTimeout: "deny",
+  mode: "enforce",
 };
 
 const VALID_TIERS: readonly ApprovalTier[] = [
@@ -46,6 +48,8 @@ const VALID_TIMEOUT_BEHAVIORS: readonly TimeoutBehavior[] = [
   "deny",
   "escalate",
 ];
+
+const VALID_MODES: readonly ExecutionMode[] = ["shadow", "enforce"];
 
 /**
  * Validate a `TegataConfig` and apply defaults.
@@ -75,6 +79,7 @@ function validateConfig(
     timeoutMs: config?.timeoutMs ?? DEFAULT_CONFIG.timeoutMs,
     defaultOnTimeout:
       config?.defaultOnTimeout ?? DEFAULT_CONFIG.defaultOnTimeout,
+    mode: config?.mode ?? DEFAULT_CONFIG.mode,
   };
 
   if (!VALID_TIERS.includes(merged.defaultTier)) {
@@ -106,6 +111,13 @@ function validateConfig(
     return {
       ok: false,
       error: `defaultOnTimeout must be one of ${VALID_TIMEOUT_BEHAVIORS.join(", ")} (got ${JSON.stringify(merged.defaultOnTimeout)})`,
+    };
+  }
+
+  if (!VALID_MODES.includes(merged.mode)) {
+    return {
+      ok: false,
+      error: `mode must be one of ${VALID_MODES.join(", ")} (got ${JSON.stringify(merged.mode)})`,
     };
   }
 
@@ -202,6 +214,16 @@ export class Tegata {
       return validated;
     }
     return { ok: true, value: new Tegata(config) };
+  }
+
+  /**
+   * The execution mode of this Tegata instance (ADR-006).
+   *
+   * Bindings use this to decide whether to block denied/escalated
+   * actions (`"enforce"`) or allow them through (`"shadow"`).
+   */
+  get mode(): ExecutionMode {
+    return this.config.mode;
   }
 
   /**
@@ -354,6 +376,7 @@ export class Tegata {
         eventType: "decided",
         proposal,
         decision,
+        mode: this.config.mode,
         timestamp: validationTimestamp,
       });
       return decision;
@@ -377,6 +400,7 @@ export class Tegata {
         eventType: "decided",
         proposal,
         decision,
+        mode: this.config.mode,
         timestamp: validationTimestamp,
       });
       return decision;
@@ -390,6 +414,7 @@ export class Tegata {
       proposalId,
       eventType: "proposed",
       proposal,
+      mode: this.config.mode,
       timestamp,
     });
 
@@ -419,6 +444,7 @@ export class Tegata {
           eventType: "escalated",
           proposal,
           decision: capDecision,
+          mode: this.config.mode,
           timestamp: new Date().toISOString(),
         });
 
@@ -446,6 +472,7 @@ export class Tegata {
           eventType: "escalated",
           proposal,
           decision: riskDecision,
+          mode: this.config.mode,
           timestamp: new Date().toISOString(),
         });
 
@@ -474,6 +501,7 @@ export class Tegata {
         eventType: "escalated",
         proposal,
         decision: escalatedDecision,
+        mode: this.config.mode,
         timestamp: new Date().toISOString(),
       });
 
@@ -509,6 +537,7 @@ export class Tegata {
           proposalId,
           eventType: "pending",
           proposal,
+          mode: this.config.mode,
           timestamp: new Date().toISOString(),
         });
 
@@ -568,6 +597,7 @@ export class Tegata {
       eventType: statusToEventType[status],
       proposal,
       decision,
+      mode: this.config.mode,
       timestamp: decisionTimestamp,
     });
 
