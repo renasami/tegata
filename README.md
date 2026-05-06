@@ -4,7 +4,7 @@
 
 > **Status: Preview (v0.1.0-preview).** Core runtime, policy engine, and MCP tool call intercept are working and tested. The API is **not frozen** until the v0.1.0 GA release — breaking changes may ship in subsequent preview versions. Trust Score and Consensus policies beyond `single`/`majority` are specified but not yet implemented. Install with `npm install tegata@preview`.
 
-MCP tool annotations like `readOnlyHint` are just hints — nothing stops a malicious server from declaring `readOnlyHint: true` and deleting your database. A2A explicitly marks authorization as ["implementation-specific"](https://github.com/a2aproject/A2A/blob/main/docs/specification.md). OWASP, NIST, and CSA all flag this gap but define no solution. Tegata fills it.
+MCP tool annotations like `readOnlyHint` are just hints — the spec itself says clients [MUST treat them as untrusted](https://modelcontextprotocol.io/specification/2025-06-18/server/tools), so nothing stops a malicious server from declaring `readOnlyHint: true` and deleting your database. MCP and A2A both define transport-layer authentication (OAuth 2.1, [`securitySchemes`](https://github.com/a2aproject/A2A/blob/main/docs/specification.md)) — what neither defines is a **workflow-level approval primitive**: _who_ approves a high-risk action, under what consensus, with what audit record. OWASP, NIST, and CSA all flag this gap but define no solution. Tegata fills it. (See [ADR-007](docs/adr/007-workflow-approval-vs-transport-authn.md) for the scope boundary.)
 
 > **Name origin**: Tegata (手形) — Edo-period travel permits that certified a traveler's identity and authorized passage through checkpoints. Tegata does the same for AI agents.
 
@@ -39,7 +39,7 @@ A2A    = Agent ↔ Agent   (Communication)
 Tegata = Approval & Auth  (Governance) ← NEW
 ```
 
-Tegata sits on top of MCP and A2A. It doesn't replace them — it adds the missing authorization layer.
+Tegata sits on top of MCP and A2A. It doesn't replace them — it adds the missing **approval workflow** layer (transport authn/authz stays with the protocols themselves; see [ADR-007](docs/adr/007-workflow-approval-vs-transport-authn.md)).
 
 ### What Tegata is NOT
 
@@ -193,9 +193,9 @@ any machine running Claude Code in a few minutes.
 
 ## Roadmap
 
-- **v0.1** (Current): Agent → Tool authorization (MCP tool call intercept)
+- **v0.1** (Current): Agent → Tool approval workflow (MCP tool call intercept)
 - **v0.2**: Cedar policy engine plugin + MCP Extension (SEP proposal)
-- **v0.3**: Agent ↔ Agent authorization (A2A binding, after A2A spec stabilizes)
+- **v0.3**: Agent ↔ Agent approval workflow (A2A binding, after A2A spec stabilizes)
 
 ## Tech Stack
 
