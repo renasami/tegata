@@ -228,10 +228,14 @@ integration.
 
 ### Negative
 
-- The `dist/` import path means a stale build silently no-ops the
-  hook. Mitigated by a banner in `docs/dogfooding.md` reminding
-  operators to `pnpm run build` after pulling. Not a correctness
-  bug — just a missed log line.
+- The `dist/` import path means a missing or broken build silently
+  no-ops the hook (fail-open), while a stale-but-loadable build runs
+  outdated logic against current tool calls. Mitigated by a banner
+  in `docs/dogfooding.md` reminding operators to `pnpm run build`
+  after pulling. The missing-build case is not a correctness bug —
+  just a missed log line — but the stale-build case can produce
+  audit entries that disagree with the published runtime, so
+  operators rebuilding after pulling matters.
 - Each tool call spawns `node` and re-imports `dist/index.js` (~100–
   300 ms). Acceptable for an interactive coding session; not
   acceptable for a high-throughput agent. A long-lived daemon
@@ -252,9 +256,15 @@ integration.
   treating the sample log as illustrative, not normative — it's a
   worked example, not a benchmark.
 - Bundling a real audit log in the repo could leak sensitive paths
-  or session metadata. Mitigated by manual review before commit
-  (PR #17 review pass) and by the schema only carrying tool name,
-  classification, and decision — never tool args or stdout.
+  or session metadata. The schema records `cwd`, `session_id`, tool
+  name, classification, and decision — but never tool args or
+  stdout, so the blast radius is limited to filesystem paths and
+  opaque session identifiers. Mitigated by manual review before
+  commit (PR #17 review pass): the published sample's `cwd` values
+  were spot-checked, and operators concerned about path disclosure
+  in their own audit logs can rotate or scrub
+  `~/.claude/tegata-audit.jsonl` at any time without breaking
+  anything.
 
 ## References
 
