@@ -45,6 +45,12 @@ export type ConsensusPolicy =
 export type TimeoutBehavior = "deny" | "escalate";
 
 // ------------------------------------------------------------
+// Execution Mode (ADR-006)
+// ------------------------------------------------------------
+
+export type ExecutionMode = "shadow" | "enforce";
+
+// ------------------------------------------------------------
 // Agent
 // ------------------------------------------------------------
 
@@ -203,6 +209,8 @@ export type TegataConfig = {
   timeoutMs?: number;
   /** What to do when a review times out. */
   defaultOnTimeout?: TimeoutBehavior;
+  /** Execution mode (ADR-006). `"enforce"` blocks denied/escalated actions; `"shadow"` logs only. */
+  mode?: ExecutionMode;
 };
 
 // ------------------------------------------------------------
@@ -229,6 +237,8 @@ export type AuditEvent = {
   proposal: Proposal;
   /** The decision made. Present on "decided", "escalated", "timed_out". */
   decision?: Decision;
+  /** Execution mode under which this event was recorded (ADR-006). */
+  mode: ExecutionMode;
   /** ISO-8601 timestamp of this event. */
   timestamp: string;
 };

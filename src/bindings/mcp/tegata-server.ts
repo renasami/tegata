@@ -151,14 +151,16 @@ export class TegataServer {
       };
 
       return tegata.propose(proposal).then((decision) => {
-        if (decision.status !== "approved") {
+        if (decision.status !== "approved" && tegata.mode === "enforce") {
           return deniedResult(
             decision.reason ?? decision.status,
             decision.proposalId,
           );
         }
 
-        // Handler approved — execute original.
+        // Approved, or shadow mode (which never blocks) — execute the
+        // original handler. In shadow mode the decision above may be
+        // denied/escalated; it is recorded in the audit log but not enforced.
         // Wrap in Promise.resolve().then() so sync throws and async
         // rejections are caught in a single chain (same pattern as
         // core executeHandler).

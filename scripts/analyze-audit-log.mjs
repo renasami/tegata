@@ -59,6 +59,29 @@ console.log(
 console.log(`Denied:       ${denied} (${pct(denied)}%)`);
 console.log();
 
+// Mode breakdown (ADR-006): surface how many decisions ran under shadow
+// vs enforce so an operator can tell at a glance whether they are still
+// only observing (all shadow) or actually enforcing verdicts.
+const enforced = entries.filter((e) => e.mode === "enforce").length;
+const shadowed = entries.filter((e) => e.mode === "shadow").length;
+const modeUnknown = total - enforced - shadowed;
+console.log("Execution mode:");
+console.log(`  Enforce:    ${enforced} (${pct(enforced)}%)  [verdicts fire]`);
+console.log(`  Shadow:     ${shadowed} (${pct(shadowed)}%)  [observe only]`);
+if (modeUnknown > 0) {
+  // Anything that is neither "shadow" nor "enforce": pre-ADR-006 logs with
+  // no mode field, or an unrecognized future value.
+  console.log(
+    `  (other):    ${modeUnknown} (${pct(modeUnknown)}%)  [no/unknown mode]`,
+  );
+}
+if (shadowed > 0 && enforced === 0) {
+  console.log(
+    "  ⚠️  All entries are shadow — verdicts are NOT being enforced.",
+  );
+}
+console.log();
+
 console.log("Action types (all):");
 for (const [type, n] of countBy("action_type")) {
   console.log(`  ${String(n).padStart(4)}  ${type}`);

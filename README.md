@@ -60,6 +60,7 @@ const created = Tegata.create({
   escalateAbove: 70, // Auto-escalate when riskScore > 70 (must be in [0, 100])
   timeoutMs: 30_000, // 30s timeout for reviewer response (must be > 0)
   defaultOnTimeout: "deny", // Deny if no response
+  mode: "enforce", // "enforce" blocks denied/escalated actions; "shadow" logs only (ADR-006)
 });
 if (!created.ok) throw new Error(created.error);
 const tegata = created.value;
