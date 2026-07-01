@@ -69,8 +69,10 @@ console.log("Execution mode:");
 console.log(`  Enforce:    ${enforced} (${pct(enforced)}%)  [verdicts fire]`);
 console.log(`  Shadow:     ${shadowed} (${pct(shadowed)}%)  [observe only]`);
 if (modeUnknown > 0) {
+  // Anything that is neither "shadow" nor "enforce": pre-ADR-006 logs with
+  // no mode field, or an unrecognized future value.
   console.log(
-    `  (unset):    ${modeUnknown} (${pct(modeUnknown)}%)  [pre-ADR-006 entries]`,
+    `  (other):    ${modeUnknown} (${pct(modeUnknown)}%)  [no/unknown mode]`,
   );
 }
 if (shadowed > 0 && enforced === 0) {
