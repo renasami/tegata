@@ -1,6 +1,6 @@
 {
   "name": "tegata",
-  "version": "0.1.0-preview.0",
+  "version": "0.1.0",
   "description": "Enforceable authorization for MCP tool calls",
   "type": "module",
   "main": "./dist/index.js",
@@ -60,7 +60,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "preview"
+    "tag": "latest"
   },
   "packageManager": "pnpm@10.11.0",
   "devDependencies": {
