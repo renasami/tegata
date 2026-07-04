@@ -2,7 +2,7 @@
 
 **Enforceable authorization for MCP tool calls.**
 
-> **Status: Preview (v0.1.0-preview).** Core runtime, policy engine, and MCP tool call intercept are working and tested. The API is **not frozen** until the v0.1.0 GA release — breaking changes may ship in subsequent preview versions. Trust Score and Consensus policies beyond `single`/`majority` are specified but not yet implemented. Install with `npm install tegata@preview`.
+> **Status: GA (v0.1.0).** Core runtime, policy engine, and MCP tool call intercept are stable and tested. The API is **frozen** — no breaking changes until a semver-major bump. Trust Score and Consensus policies beyond `single`/`majority` are specified but not yet implemented (planned for v0.2 — see the feature matrix below). Install with `npm install tegata`.
 
 MCP tool annotations like `readOnlyHint` are just hints — the spec itself says clients [MUST treat them as untrusted](https://modelcontextprotocol.io/specification/2025-06-18/server/tools), so nothing stops a malicious server from declaring `readOnlyHint: true` and deleting your database. MCP and A2A both define transport-layer authentication (OAuth 2.1, [`securitySchemes`](https://github.com/a2aproject/A2A/blob/main/docs/specification.md)) — what neither defines is a **workflow-level approval primitive**: _who_ approves a high-risk action, under what consensus, with what audit record. OWASP, NIST, and CSA all flag this gap but define no solution. Tegata fills it. (See [ADR-007](docs/adr/007-workflow-approval-vs-transport-authn.md) for the scope boundary.)
 
@@ -46,6 +46,28 @@ Tegata sits on top of MCP and A2A. It doesn't replace them — it adds the missi
 - **Not a gateway** — Solo.io agentgateway, MintMCP are infrastructure. Tegata defines the approval _rules_ that gateways enforce.
 - **Not a policy engine** — Cedar, OPA evaluate policies. Tegata orchestrates the _approval workflow_ around them (Cedar plugin planned for v0.2).
 - **Not a communication protocol** — A2A delivers messages. Tegata defines the _semantics of approval_ on top of those messages.
+
+## Feature Status
+
+What ships and works today in v0.1.0, and what is specified but deferred. The
+`single` and `majority` consensus policies are implemented; the remaining
+policies in the [Consensus Policies](#consensus-policies-should) table are
+specified but not yet wired up.
+
+| Capability                                   | Status    |
+| -------------------------------------------- | --------- |
+| Tiered Approval (5 tiers)                    | ✅ v0.1.0 |
+| Capability-based authorization               | ✅ v0.1.0 |
+| Policy-as-code (glob matching)               | ✅ v0.1.0 |
+| Audit trail (append-only, event-sourced)     | ✅ v0.1.0 |
+| MCP tool call intercept binding              | ✅ v0.1.0 |
+| Consensus: `single`, `majority`              | ✅ v0.1.0 |
+| Execution modes: `shadow` / `enforce`        | ✅ v0.1.0 |
+| Consensus: `unanimous`, `quorum`, `weighted` | 🚧 v0.2   |
+| Dynamic Trust Score (EMA)                    | 🚧 v0.2   |
+| Cedar / OPA policy engine plugin             | 🚧 v0.2   |
+| `TegataReporter` (opt-in telemetry)          | 🚧 v0.2   |
+| Agent ↔ Agent approval (A2A binding)         | 🚧 v0.3   |
 
 ## Quick Start
 

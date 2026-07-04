@@ -26,7 +26,7 @@ mode once you trust the classification table.
 ### 1. Build Tegata
 
 The hook imports `Tegata` from this repo's `dist/` directory — the exact
-same bundle shipped to npm as `tegata@preview`. Build it once:
+same bundle shipped to npm as `tegata`. Build it once:
 
 ```bash
 pnpm install
