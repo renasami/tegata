@@ -40,9 +40,14 @@ Tegata()` remains available with sensible defaults.
 
 ### Changed
 
-- `AuditEvent` gains a **required** `mode` field. The runtime always populates
-  it, so consumers only reading the audit log are unaffected; code that
-  constructs or structurally implements `AuditEvent` must now supply `mode`.
+- **Breaking (relative to `0.1.0-preview.0`, permitted by the pre-release
+  policy):** `AuditEvent` — part of the public type surface via
+  `src/index.ts` — gains a **required** `mode` field. This break landed during
+  the preview window, which the preview README explicitly declared unfrozen;
+  the API freeze applies from `0.1.0` onward, so this is not a post-GA semver
+  break. The runtime always populates `mode`, so consumers that only read the
+  audit log (`getAuditLog()`) are unaffected — only code that constructs or
+  structurally implements `AuditEvent` must now supply it.
 - README: corrected the A2A `securitySchemes` citation against the primary
   source, clarified that `proposer` is a required field (ADR-002 rationale),
   and documented the `shadow`/`enforce` execution modes.
